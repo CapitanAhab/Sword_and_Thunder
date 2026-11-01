@@ -1,0 +1,39 @@
+/* Keyframes de effects-config.json (el nombre de cada keyframe = su preset). */
+
+@keyframes fx-rowglow { 0% { background: var(--sel-strong); } 100% { background: var(--sel); } }
+@keyframes fx-rowflash { 0% { background: var(--accent); color: var(--bg); } 100% { background: var(--sel); } }
+/* Transiciones de pantalla. --dir: 1 entra por la derecha, −1 por la izquierda */
+@keyframes fx-tr-slide { from { transform: translateX(calc(var(--dir, 1) * var(--tr-dist, 35%))); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fx-tr-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fx-tr-zoom { from { transform: scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fx-tr-drop { from { transform: scale(1.08); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fx-tr-flip { from { transform: perspective(700px) rotateY(calc(var(--dir, 1) * -80deg)); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fx-tr-rise { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fx-tr-boot { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes fx-flash { 0% { opacity: 0; } 15% { opacity: .5; } 100% { opacity: 0; } }
+@keyframes fx-pulse { 0% { transform: none; } 30% { transform: scale(1.05); } 100% { transform: none; } }
+@keyframes fx-slash { 0% { transform: translateX(-110%) skewX(-20deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateX(160%) skewX(-20deg); opacity: 0; } }
+@keyframes fx-spend-pop { 0% { transform: scale(1); } 35% { transform: scale(1.9); } 100% { transform: scale(1); } }
+@keyframes fx-spend-shatter { 0% { transform: none; opacity: 1; } 50% { transform: scale(.2) rotate(90deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes fx-spend-blink { 0%, 40%, 80%, 100% { opacity: 1; } 20%, 60% { opacity: .1; } }
+@keyframes fx-damage-shake { 0%, 100% { transform: none; } 15% { transform: translateX(-7px); } 30% { transform: translateX(6px); } 45% { transform: translateX(-4px); } 60% { transform: translateX(3px); } 75% { transform: translateX(-1px); } }
+@keyframes fx-heal-glow { 0% { box-shadow: inset 0 0 0 0 transparent; background: transparent; } 30% { box-shadow: inset 0 0 0 2px var(--heal); background: rgba(76, 195, 138, .15); } 100% { box-shadow: inset 0 0 0 0 transparent; background: transparent; } }
+@keyframes fx-dim { 0% { opacity: 0; } 40%, 60% { opacity: .88; } 100% { opacity: 0; } }
+
+/* Capas de <FxLayer>: destello / oscurecer y tajo */
+.fx-overlay,
+.fx-slash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+}
+.fx-overlay { background: var(--fx-color, #fff); }
+.fx-slash {
+  inset: 0 auto 0 0;
+  width: 70%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0) 30%, rgba(220, 240, 255, .85) 50%, rgba(255, 255, 255, 0) 70%, transparent);
+}
+/* Para que pop/blink escalen un texto en línea */
+.fx-target { display: inline-block; }

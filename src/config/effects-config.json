@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "masterVolume": 0.7,
+  "synth": {
+    "attackMs": 4,
+    "release": "exponential"
+  },
+  "events": {
+    "cursor": {
+      "animation": {
+        "preset": "snap",
+        "durationMs": 220,
+        "easing": "ease-out"
+      },
+      "sound": {
+        "preset": "arc-glint",
+        "notes": [
+          {"wave": "sine", "freqFrom": 3136, "freqTo": 3136, "at": 0, "ms": 30, "gain": 0.08},
+          {"wave": "sine", "freqFrom": 2093, "freqTo": 2093, "at": 0, "ms": 40, "gain": 0.1}
+        ]
+      },
+      "vibrate": {
+        "preset": "tick",
+        "pattern": [6]
+      }
+    },
+    "submenuEnter": {
+      "animation": {
+        "preset": "zoom",
+        "durationMs": 200,
+        "easing": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "sound": {
+        "preset": "chip-up",
+        "notes": [
+          {"wave": "square", "freqFrom": 523, "freqTo": 523, "at": 0, "ms": 45, "gain": 0.08},
+          {"wave": "square", "freqFrom": 784, "freqTo": 784, "at": 50, "ms": 60, "gain": 0.08}
+        ]
+      },
+      "vibrate": {
+        "preset": "tick",
+        "pattern": [6]
+      }
+    },
+    "actionExecute": {
+      "animation": {
+        "preset": "slash",
+        "durationMs": 320,
+        "easing": "ease-in-out"
+      },
+      "sound": {
+        "preset": "16-confirm",
+        "notes": [
+          {"wave": "sawtooth", "freqFrom": 523, "freqTo": 523, "at": 0, "ms": 70, "gain": 0.07, "filter": 2600},
+          {"wave": "sawtooth", "freqFrom": 784, "freqTo": 784, "at": 60, "ms": 70, "gain": 0.07, "filter": 2600},
+          {"wave": "sawtooth", "freqFrom": 1046, "freqTo": 1046, "at": 120, "ms": 160, "gain": 0.07, "filter": 2600, "vibrato": {"rate": 6, "depth": 20}, "echo": {"ms": 110, "feedback": 0.3, "mix": 0.3}}
+        ]
+      },
+      "vibrate": {
+        "preset": "double",
+        "pattern": [15, 40, 25]
+      }
+    },
+    "back": {
+      "animation": {
+        "preset": "drop",
+        "durationMs": 200,
+        "easing": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "sound": {
+        "preset": "chip-down",
+        "notes": [
+          {"wave": "square", "freqFrom": 784, "freqTo": 784, "at": 0, "ms": 40, "gain": 0.08},
+          {"wave": "square", "freqFrom": 523, "freqTo": 523, "at": 45, "ms": 55, "gain": 0.08}
+        ]
+      },
+      "vibrate": {
+        "preset": "tick",
+        "pattern": [6]
+      }
+    },
+    "resourceSpend": {
+      "animation": {
+        "preset": "pop",
+        "durationMs": 320,
+        "easing": "ease-out"
+      },
+      "sound": {
+        "preset": "16-crystal",
+        "notes": [
+          {"wave": "triangle", "freqFrom": 1568, "freqTo": 1568, "at": 0, "ms": 90, "gain": 0.16},
+          {"wave": "triangle", "freqFrom": 2093, "freqTo": 2093, "at": 70, "ms": 90, "gain": 0.14},
+          {"wave": "triangle", "freqFrom": 2637, "freqTo": 2637, "at": 140, "ms": 200, "gain": 0.12, "echo": {"ms": 110, "feedback": 0.3, "mix": 0.3}}
+        ]
+      },
+      "vibrate": {
+        "preset": "short",
+        "pattern": [12]
+      }
+    },
+    "hpChange": {
+      "damage": {
+        "animation": {
+          "preset": "flash",
+          "durationMs": 350,
+          "easing": "ease-out",
+          "barMs": 200
+        },
+        "sound": {
+          "preset": "chip",
+          "notes": [
+            {"wave": "square", "freqFrom": 220, "freqTo": 110, "at": 0, "ms": 200, "gain": 0.1},
+            {"wave": "noise", "at": 0, "ms": 100, "gain": 0.12}
+          ]
+        },
+        "vibrate": {
+          "preset": "soft",
+          "pattern": [20]
+        }
+      },
+      "heal": {
+        "animation": {
+          "preset": "flash",
+          "durationMs": 350,
+          "easing": "ease-out",
+          "barMs": 300
+        },
+        "sound": {
+          "preset": "chip",
+          "notes": [
+            {"wave": "square", "freqFrom": 523, "freqTo": 523, "at": 0, "ms": 60, "gain": 0.07},
+            {"wave": "square", "freqFrom": 659, "freqTo": 659, "at": 60, "ms": 60, "gain": 0.07},
+            {"wave": "square", "freqFrom": 784, "freqTo": 784, "at": 120, "ms": 60, "gain": 0.07},
+            {"wave": "square", "freqFrom": 1046, "freqTo": 1046, "at": 180, "ms": 140, "gain": 0.07}
+          ]
+        },
+        "vibrate": {
+          "preset": "soft",
+          "pattern": [8]
+        }
+      }
+    },
+    "rest": {
+      "animation": {
+        "preset": "dim",
+        "durationMs": 1000,
+        "easing": "ease-in-out"
+      },
+      "sound": {
+        "preset": "chip-jingle",
+        "notes": [
+          {"wave": "square", "freqFrom": 523, "freqTo": 523, "at": 0, "ms": 80, "gain": 0.06},
+          {"wave": "square", "freqFrom": 659, "freqTo": 659, "at": 90, "ms": 80, "gain": 0.06},
+          {"wave": "square", "freqFrom": 784, "freqTo": 784, "at": 180, "ms": 80, "gain": 0.06},
+          {"wave": "square", "freqFrom": 1046, "freqTo": 1046, "at": 270, "ms": 240, "gain": 0.06},
+          {"wave": "triangle", "freqFrom": 262, "freqTo": 262, "at": 0, "ms": 500, "gain": 0.16}
+        ]
+      },
+      "vibrate": {
+        "preset": "none",
+        "pattern": []
+      }
+    },
+    "sheetPageChange": {
+      "animation": {
+        "preset": "boot",
+        "durationMs": 400,
+        "easing": "steps(8, end)"
+      },
+      "sound": {
+        "preset": "none",
+        "notes": []
+      },
+      "vibrate": {
+        "preset": "none",
+        "pattern": []
+      }
+    },
+    "start": {
+      "animation": {
+        "preset": "boot",
+        "durationMs": 600,
+        "easing": "steps(8, end)"
+      },
+      "sound": {
+        "preset": "soft-rise",
+        "notes": [
+          {"wave": "sine", "freqFrom": 262, "freqTo": 523, "at": 0, "ms": 320, "gain": 0.18},
+          {"wave": "sine", "freqFrom": 392, "freqTo": 784, "at": 150, "ms": 320, "gain": 0.13}
+        ]
+      },
+      "vibrate": {
+        "preset": "short",
+        "pattern": [12]
+      }
+    }
+  }
+}

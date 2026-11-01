@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "name": "Furio",
+  "race": "human",
+  "racialAbilityChoice": "int",
+  "alignment": "NG",
+  "xp": 333,
+  "xpTrack": "slow",
+  "abilities": { "str": 16, "dex": 13, "con": 15, "int": 16, "wis": 12, "cha": 12 },
+  "levels": [
+    { "class": "magus", "hp": 8, "fcb": "hp" }
+  ],
+  "feats": [
+    { "id": "combat-casting" },
+    { "id": "improved-initiative" }
+  ],
+  "traits": [],
+  "languages": ["Elven", "Orc", "Draconic"],
+  "skills": {
+    "spellcraft": 1,
+    "knowledge-arcana": 1,
+    "knowledge-planes": 1,
+    "knowledge-dungeoneering": 1,
+    "use-magic-device": 1,
+    "intimidate": 1,
+    "perception": 1
+  },
+  "equipment": {
+    "armor": {
+      "name": "Chain shirt",
+      "category": "light",
+      "armorBonus": 4,
+      "maxDex": 4,
+      "armorCheckPenalty": -2,
+      "arcaneSpellFailure": 20
+    },
+    "weapons": [
+      {
+        "id": "longsword",
+        "name": "Longsword",
+        "category": "one-handed",
+        "damage": "1d8",
+        "critical": "19-20/x2",
+        "damageType": "S"
+      }
+    ],
+    "items": [
+      {
+        "id": "boots-of-levitation",
+        "name": "Boots of levitation",
+        "slot": "feet",
+        "notes": "Levitate at will (CL 3)"
+      },
+      { "id": "spellbook", "name": "Spellbook" },
+      { "id": "spell-component-pouch", "name": "Spell component pouch" },
+      { "id": "backpack", "name": "Backpack" },
+      { "id": "bedroll", "name": "Bedroll" },
+      { "id": "waterskin", "name": "Waterskin" },
+      { "id": "trail-rations", "name": "Trail rations", "quantity": 3 },
+      { "id": "flint-and-steel", "name": "Flint and steel" },
+      { "id": "belt-pouch", "name": "Belt pouch" }
+    ]
+  },
+  "spellbook": {
+    "0": [
+      "Acid Splash", "Arcane Mark", "Dancing Lights", "Daze", "Detect Magic", "Disrupt Undead", "Flare",
+      "Ghost Sound", "Light", "Mage Hand", "Open/Close", "Prestidigitation", "Ray of Frost", "Read Magic", "Spark"
+    ],
+    "1": [
+      "Shocking Grasp", "Frostbite", "Corrosive Touch", "Shield", "Vanish", "Grease", "Enlarge Person"
+    ]
+  },
+  "defaultPrepared": {
+    "0": ["Dancing Lights", "Detect Magic", "Daze"],
+    "1": ["Shocking Grasp", "Shield"]
+  },
+  "wealth": { "pp": 0, "gp": 0, "sp": 0, "cp": 0 }
+}

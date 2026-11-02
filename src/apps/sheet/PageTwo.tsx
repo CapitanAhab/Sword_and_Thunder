@@ -3,15 +3,17 @@ import type { ComputedSheet, FeatureLine, SpellcastingLine } from '../../core/co
 import type { Character } from '../../core/schema'
 import { emptySession } from '../../core/session'
 import { useT, type Lang } from '../../i18n/useT'
-import { damageTypeLabel, formatKg, formatValue, minus, prettyCrit, resourceDetailLabel, slotLabel } from './labels'
-import { PlainLine, StatLine } from './StatLine'
+import { damageTypeLabel, formatKg, minus, prettyCrit, slotLabel } from './labels'
+import { Description } from './SheetHeader'
+import { SkillsCard } from './PageOne'
 import { localName, localNote, localSource, localSpell, localSummary } from '../../data/names'
 import { SpellCard } from '../play/SpellCard'
 import type { MenuCtx } from '../play/menus'
 
 type SpellRef = { level: string; name: string }
 
-// Página 2 de la oficial: armadura, equipo, dinero, dotes, aptitudes especiales y conjuros.
+// Página 2, la consulta: descripción, habilidades, conjuros del libro, dotes, aptitudes, armadura, equipo, dinero,
+// idiomas y notas.
 // Todo nombre visible pasa por names.ts (en ES todo en español; los datos quedan en inglés).
 export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character: Character }) {
   const { t, lang } = useT()
@@ -56,6 +58,56 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
 
   return (
     <>
+      <Description sheet={sheet} />
+      <SkillsCard sheet={sheet} />
+      {/* El spellbook es del personaje; los /día y CD salen de la primera clase lanzadora */}
+      {sheet.spellcasting[0] && <Spellbook sc={sheet.spellcasting[0]} spellbook={character.spellbook} onOpen={setCard} />}
+
+      <section className="card">
+        <h2 className="card-title card-title-split">
+          {t('sheet.feats')} <span data-testid="sheet-feat-slots">{sheet.featSlots.used}/{sheet.featSlots.available}</span>
+        </h2>
+        <ul className="plain-list">
+          {sheet.feats.map((f) => {
+            const summary = localSummary(lang, f.id)
+            return (
+              <li key={f.id + (f.param ?? '')}>
+                <span data-testid={`sheet-feat-${f.id}`}>
+                  {localName(lang, f.id, f.name)}
+                  {f.param && ` (${localSource(lang, f.param)})`}
+                </span>
+                {summary && (
+                  <small className="muted item-note" data-testid={`sheet-feat-${f.id}-summary`}>
+                    {summary}
+                  </small>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+
+      {character.traits.length > 0 && (
+        <section className="card">
+          <h2 className="card-title">{t('sheet.traits')}</h2>
+          <ul className="plain-list">
+            {character.traits.map((tr) => (
+              <li key={tr.name}>{localSource(lang, tr.name)}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="card">
+        <h2 className="card-title">{t('sheet.specialAbilities')}</h2>
+        {raceFeatures.length > 0 && <FeatureGroup head={localSource(lang, sheet.race)} features={raceFeatures} lang={lang} />}
+        {sheet.classes.map((c) => {
+          const own = sheet.features.filter((f) => f.source === c.id)
+          if (!own.length) return null
+          return <FeatureGroup key={c.id} head={`${localName(lang, c.id, c.name)} ${c.level}`} features={own} lang={lang} testId={`sheet-features-${c.id}`} />
+        })}
+      </section>
+
       {(armor || shield) && (
         <section className="card">
           <h2 className="card-title">{t('sheet.armor')}</h2>
@@ -140,73 +192,12 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
       </section>
 
       <section className="card">
-        <h2 className="card-title card-title-split">
-          {t('sheet.feats')} <span data-testid="sheet-feat-slots">{sheet.featSlots.used}/{sheet.featSlots.available}</span>
-        </h2>
-        <ul className="plain-list">
-          {sheet.feats.map((f) => {
-            const summary = localSummary(lang, f.id)
-            return (
-              <li key={f.id + (f.param ?? '')}>
-                <span data-testid={`sheet-feat-${f.id}`}>
-                  {localName(lang, f.id, f.name)}
-                  {f.param && ` (${localSource(lang, f.param)})`}
-                </span>
-                {summary && (
-                  <small className="muted item-note" data-testid={`sheet-feat-${f.id}-summary`}>
-                    {summary}
-                  </small>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+        <h2 className="card-title">{t('sheet.languages')}</h2>
+        <p className="line" data-testid="sheet-languages">
+          {sheet.languages.known.map((l) => localSource(lang, l)).join(' · ')}
+          {sheet.languages.pending > 0 && ` (+${sheet.languages.pending} ${t('sheet.languagesPending')})`}
+        </p>
       </section>
-
-      {character.traits.length > 0 && (
-        <section className="card">
-          <h2 className="card-title">{t('sheet.traits')}</h2>
-          <ul className="plain-list">
-            {character.traits.map((tr) => (
-              <li key={tr.name}>{localSource(lang, tr.name)}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="card">
-        <h2 className="card-title">{t('sheet.specialAbilities')}</h2>
-        {raceFeatures.length > 0 && <FeatureGroup head={localSource(lang, sheet.race)} features={raceFeatures} lang={lang} />}
-        {sheet.classes.map((c) => {
-          const own = sheet.features.filter((f) => f.source === c.id)
-          if (!own.length) return null
-          return <FeatureGroup key={c.id} head={`${localName(lang, c.id, c.name)} ${c.level}`} features={own} lang={lang} testId={`sheet-features-${c.id}`} />
-        })}
-        {sheet.resources.map((r) => (
-          <div key={r.id}>
-            <StatLine label={localName(lang, r.id, r.name)} stat={r.max} signed={false} testId={`sheet-resource-${r.id}`} />
-            {Object.entries(r.details).map(([k, v]) => (
-              <p key={k} className="stat-parts" data-testid={`sheet-resource-${r.id}-${k}`}>
-                {resourceDetailLabel(t, k)} {formatValue(v, true)}
-              </p>
-            ))}
-          </div>
-        ))}
-      </section>
-
-      {sheet.spellcasting.map((sc) => (
-        <section key={sc.classId} className="card">
-          <h2 className="card-title">
-            {t('sheet.spells')}
-            {sheet.spellcasting.length > 1 && ` · ${localName(lang, sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)}`}
-          </h2>
-          <StatLine label={t('sheet.cl')} stat={sc.casterLevel} signed={false} testId="sheet-cl" />
-          <StatLine label={t('sheet.concentration')} stat={sc.concentration} testId="sheet-concentration" />
-          <PlainLine label={t('sheet.asf')} value={`${sc.arcaneSpellFailure}%`} testId="sheet-asf" />
-        </section>
-      ))}
-      {/* El spellbook es del personaje; los /día y CD salen de la primera clase lanzadora */}
-      {sheet.spellcasting[0] && <Spellbook sc={sheet.spellcasting[0]} spellbook={character.spellbook} onOpen={setCard} />}
 
       {character.notes && (
         <section className="card">

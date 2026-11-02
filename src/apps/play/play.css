@@ -259,10 +259,35 @@ a.hud-icon {
   touch-action: pan-y;
 }
 .crumb {
+  min-height: 22px; /* el renglón está siempre (vacío en la raíz), así la lista no salta */
   padding: 6px 12px 2px;
   font-size: 0.7rem;
   letter-spacing: 0.02em;
   color: var(--text-muted);
+}
+
+/* --- Pestañas del menú principal (mismo estilo que el selector de páginas de la ficha) --- */
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  min-height: var(--tap);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tab[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 .list {
   position: relative;
@@ -428,49 +453,6 @@ a.hud-icon {
   color: var(--accent) !important;
   font-weight: 600;
   letter-spacing: 0.08em;
-}
-
-/* --- Pantalla de turno (MI TURNO): tapa todo hasta que la tocás --- */
-.turn-card {
-  justify-content: space-between;
-  gap: 16px;
-  padding: 32px 16px 8px;
-  border: 0;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-}
-.turn-card-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12vh;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-.turn-card-head b {
-  font-size: 1.4rem;
-}
-.turn-card-head span {
-  color: var(--accent);
-}
-.turn-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.turn-card-body .spell-text {
-  margin: 0;
-}
-.turn-card-muted {
-  color: var(--text-muted);
-}
-.turn-card-continue {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-transform: uppercase;
 }
 
 /* --- Tocá para empezar --- */

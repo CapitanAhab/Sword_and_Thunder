@@ -32,13 +32,13 @@ export const sessionSchema = z.object({
   buffs: z.array(z.string()).default([]), // conjuros activos que suman modifiers (Shield)
   buffRounds: z.record(z.string(), z.number().int().positive()).default({}), // rondas que le quedan a cada buff (solo en combate)
   // Bonos y penalizadores ajenos (Bendecir, flanqueo, el −2 CA de un enemigo). id = uno común ('bless') o 'free-N'.
-  // Sin rounds, duran hasta Terminar combate (o Descansar); con rounds, bajan con MI TURNO.
+  // Sin rounds, duran hasta Terminar combate (o Descansar); con rounds, bajan con NUEVO TURNO.
   external: z
     .array(z.object({ id: z.string(), mods: z.array(modifierInputSchema), rounds: z.number().int().positive().optional() }))
     .default([]),
-  // Modo combate: round 0 = arrancó el combate pero todavía no te tocó. Se avanza con MI TURNO.
+  // Modo combate: round 0 = arrancó el combate pero todavía no te tocó. Se avanza con NUEVO TURNO.
   combat: z.object({ round: z.number().int().nonnegative() }).nullable().default(null),
-  surprise: z.boolean().default(false), // ronda sorpresa: hasta el primer MI TURNO, solo una acción estándar o de movimiento
+  surprise: z.boolean().default(false), // ronda sorpresa: hasta el primer NUEVO TURNO, solo una acción estándar o de movimiento
   // Última acción del turno hecha en este combate (menú + fila), para repetirla desde el menú principal
   lastAction: z.object({ menu: z.string(), item: z.string() }).nullable().default(null),
   charging: z.boolean().default(false), // cargaste: −2 CA hasta tu próximo turno
@@ -67,7 +67,7 @@ export function newSession(character: Character): Session {
 
 // --- Deshacer (un solo paso) ---
 // Se deshace solo lo que gasta o devuelve recursos: PG, usos de recursos (⚡), conjuros lanzados (◆), objetos usados
-// y la carga en la mano. Todo lo demás (atacar, ON/OFF, combate, MI TURNO, Preparar suelto) borra lo que había, porque
+// y la carga en la mano. Todo lo demás (atacar, ON/OFF, combate, NUEVO TURNO, Preparar suelto) borra lo que había, porque
 // deshacer después volvería atrás también eso.
 const RESOURCE_KEYS = ['damage', 'resourcesUsed', 'cast', 'itemsUsed', 'held'] as const
 export const changesResources = (before: Session, after: Session): boolean =>
@@ -607,7 +607,7 @@ export function startCombat(s: Session, prebuffRounds: Readonly<Record<string, n
   return { ...s, combat: { round: 0 }, surprise: false, lastAction: null, buffRounds, enhancement }
 }
 
-// Ronda sorpresa: se marca solo antes del primer MI TURNO (ronda 0) y se apaga sola con MI TURNO.
+// Ronda sorpresa: se marca solo antes del primer NUEVO TURNO (ronda 0) y se apaga sola con NUEVO TURNO.
 export const toggleSurprise = (s: Session): Session => (s.combat?.round === 0 ? { ...s, surprise: !s.surprise } : s)
 
 // Guarda la acción del turno que se acaba de hacer (menú + fila), para repetirla. Solo en combate.
@@ -616,7 +616,7 @@ export const recordAction = (s: Session, menu: string, item: string): Session =>
 export const charge = (s: Session): Session => ({ ...s, charging: true })
 export const endCharge = (s: Session): Session => ({ ...s, charging: false })
 
-// MI TURNO (se toca cuando el DM te da el turno): avanza la ronda, se va lo que duraba "hasta tu próximo turno"
+// NUEVO TURNO (se toca cuando el DM te da el turno): avanza la ronda, se va lo que duraba "hasta tu próximo turno"
 // (carga y postura) y los efectos con duración pierden una ronda; al llegar a 0 se apagan.
 export function nextTurn(s: Session): Session {
   if (!s.combat) return s
@@ -634,44 +634,16 @@ export function nextTurn(s: Session): Session {
   return { ...s, combat: { round: s.combat.round + 1 }, surprise: false, charging: false, readied: false, stance: null, buffs, buffRounds, enhancement, external, undo: null }
 }
 
-// Resumen de MI TURNO, para el aviso del detalle: qué se apagó al empezar el turno, qué sigue prendido (con sus
-// rondas) y lo urgente. Los textos los arma la vista.
-export type TurnEffect =
-  | { kind: 'buff'; id: string; rounds?: number }
-  | { kind: 'enhancement'; bonus: number; rounds?: number }
-  | { kind: 'external'; effect: Session['external'][number] }
-  | { kind: 'stance'; id: string }
-  | { kind: 'charging' }
-  | { kind: 'surprise' }
-  | { kind: 'readied' }
-// Moribundo: la tirada para estabilizarse es de CON contra CD 10 + los PG negativos (dados físicos; si falla, −1 PG).
+// Lo urgente al empezar tu turno (o en cualquier momento del combate): lo que te pide hacer algo. Los textos los arma
+// la vista. Moribundo: la tirada para estabilizarse es de CON contra CD 10 + los PG negativos (dados físicos; si falla, −1 PG).
 export type TurnUrgent = { kind: 'dying'; dc: number; conMod: number } | { kind: 'prone' } | { kind: 'held'; name: string }
-export interface TurnSummary {
-  round: number
-  expired: TurnEffect[]
-  active: TurnEffect[]
-  urgent: TurnUrgent[]
-}
-export function turnSummary(sheet: ComputedSheet, before: Session, after: Session): TurnSummary {
-  const expired: TurnEffect[] = []
-  if (before.charging && !after.charging) expired.push({ kind: 'charging' })
-  if (before.stance && !after.stance) expired.push({ kind: 'stance', id: before.stance })
-  if (before.surprise && !after.surprise) expired.push({ kind: 'surprise' })
-  if (before.readied && !after.readied) expired.push({ kind: 'readied' })
-  for (const b of before.buffs) if (!after.buffs.includes(b)) expired.push({ kind: 'buff', id: b })
-  if (before.enhancement && !after.enhancement) expired.push({ kind: 'enhancement', bonus: before.enhancement.bonus })
-  for (const e of before.external) if (!after.external.some((x) => x.id === e.id)) expired.push({ kind: 'external', effect: e })
-  const active: TurnEffect[] = [
-    ...after.buffs.map((id): TurnEffect => ({ kind: 'buff', id, rounds: after.buffRounds[id] })),
-    ...(after.enhancement ? [{ kind: 'enhancement', bonus: after.enhancement.bonus, rounds: after.enhancement.rounds } as const] : []),
-    ...after.external.map((effect): TurnEffect => ({ kind: 'external', effect })),
-  ]
+export function turnUrgent(sheet: ComputedSheet, s: Session): TurnUrgent[] {
   const urgent: TurnUrgent[] = []
-  const hp = currentHp(sheet, after)
-  if (hpState(sheet, after) === 'dying') urgent.push({ kind: 'dying', dc: 10 - hp, conMod: sheet.abilities.con.mod })
-  if (after.conditions.includes('prone')) urgent.push({ kind: 'prone' })
-  if (after.held) urgent.push({ kind: 'held', name: after.held.name })
-  return { round: after.combat?.round ?? 0, expired, active, urgent }
+  const hp = currentHp(sheet, s)
+  if (hpState(sheet, s) === 'dying') urgent.push({ kind: 'dying', dc: 10 - hp, conMod: sheet.abilities.con.mod })
+  if (s.conditions.includes('prone')) urgent.push({ kind: 'prone' })
+  if (s.held) urgent.push({ kind: 'held', name: s.held.name })
+  return urgent
 }
 
 // Terminar combate: se van la ronda, la carga, la postura, lo que duraba en rondas (supuesto: 1 minuto ya pasó)

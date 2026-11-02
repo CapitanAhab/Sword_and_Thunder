@@ -5,14 +5,14 @@ import { useCharacter } from '../../state/CharacterContext'
 import { SessionProvider, useSession } from '../../state/SessionContext'
 import {
   addFreeEffect, adjustPrepared, afterAction, clearUndo, emptyFreeDraft, hpState, nextTurn, prepare, recordAction, rest, sameUndo, setSpellCombatTrade, timesCast,
-  trackUndo, turnSummary, undoLast,
+  trackUndo, undoLast,
   type FreeDraft, type Session, type SessionFix, type SpellCounts,
 } from '../../core/session'
 import { localName, localSpell } from '../../data/names'
 import { endsOnAttack } from '../../data/items'
 import type { Lang } from '../../i18n/useT'
 import type { Translate } from '../sheet/labels'
-import { buildMenu, turnNotice, type After, type MenuCtx, type MenuItem } from './menus'
+import { buildMenu, type After, type MenuCtx, type MenuItem } from './menus'
 import { eventFx, fire, registerLayer, unlockAudio } from './fx/effects'
 import { Hud } from './Hud'
 import { DetailPanel } from './DetailPanel'
@@ -20,7 +20,6 @@ import { CursorList } from './CursorList'
 import { ActionBar } from './ActionBar'
 import { SpellCard } from './SpellCard'
 import { DetailCard } from './DetailCard'
-import { TurnCard } from './TurnCard'
 import './play.css'
 
 // Menú jugable (#/play): HUD → detalle → lista con cursor → barra del pulgar. Lee la ficha + la sesión.
@@ -96,10 +95,8 @@ function PlayApp() {
   const listRef = useRef<HTMLDivElement>(null)
   const touch = useRef<{ x: number; y: number } | null>(null)
 
-  // Borrador del modificador Libre (Personaje › Efectos activos › Agregar › Libre…)
+  // Borrador del modificador Libre (Estado › Efecto de otro › Libre…)
   const [free, setFree] = useState<FreeDraft>(emptyFreeDraft)
-  // Pantalla de turno (MI TURNO): tapa todo hasta que la tocás
-  const [turnCard, setTurnCard] = useState<{ round: number; notice: MenuItem['detail'] } | null>(null)
   // Cada poción de curar suma 1: el HUD abre el editor de PG para sumar la cura
   const [healRequest, setHealRequest] = useState(0)
   const ctx: MenuCtx = { t, lang, sheet, session, character, draft, showAllSkills, free }
@@ -295,7 +292,7 @@ function PlayApp() {
   const done = () => {
     if (swallowGhost()) return
     if (editingFree) {
-      // LISTO del Libre: lo agrega (si todo es 0, no agrega nada). Como los ON/OFF, no se deshace: se apaga en Efectos activos.
+      // LISTO del Libre: lo agrega (si todo es 0, no agrega nada). Como los ON/OFF, no se deshace: se quita en Estado.
       update(track((s) => addFreeEffect(s, free), t('play.freeEffect')))
       fire('submenuEnter', { noAnim: true })
       finish('root', 0)
@@ -314,15 +311,13 @@ function PlayApp() {
     finish('root', 0)
   }
 
-  // MI TURNO (desde cualquier pantalla): avanza la ronda, deja el menú principal con el cursor en la fila de arriba
-  // (↻ Repetir) y tapa todo con la pantalla de turno (qué se apagó, qué sigue, lo urgente) hasta que la tocás.
-  // Transición 8-bit de la ficha (sin sonido) + el sonido de submenuEnter: un solo sonido (Regla A). Cerrarla no suena.
+  // NUEVO TURNO (desde cualquier pantalla): avanza la ronda y deja la pestaña Pelea con el cursor en la fila de arriba
+  // (↻ Repetir), cuyo detalle muestra lo urgente en amarillo. Lo que vence y lo que queda se ve en Estado y en los chips.
+  // Transición 8-bit de la ficha (sin sonido) + el sonido de submenuEnter: un solo sonido (Regla A).
   const onTurn = () => {
     window.clearTimeout(finishTimer.current)
     setCard(null)
     flowUndo.current = null
-    const summary = turnSummary(sheet, session, nextTurn(session))
-    setTurnCard({ round: summary.round, notice: turnNotice(ctx, summary) })
     update(nextTurn)
     setStack([{ menu: 'root', sel: 0, label: '' }])
     fire('sheetPageChange', { target: rootRef.current })
@@ -360,6 +355,19 @@ function PlayApp() {
 
   const crumb = stack.slice(1).map((f) => f.label).join(' › ')
 
+  // Pestañas del menú principal: PELEA ('root') y PERSONAJE ('character'). La pestaña es la raíz de la pila:
+  // tocar una (también desde un submenú) deja su raíz con el cursor arriba. Iniciar combate y NUEVO TURNO llevan a PELEA.
+  const tab = stack[0]?.menu === 'character' ? 'character' : 'root'
+  const goTab = (menu: 'root' | 'character') => {
+    if (dead || (menu === tab && stack.length === 1)) return
+    if (editingTrade) update((s) => setSpellCombatTrade(sheet, s, tradeBefore.current))
+    window.clearTimeout(finishTimer.current)
+    setCard(null)
+    flowUndo.current = null
+    setStack([{ menu, sel: 0, label: '' }])
+    fire('cursor', { noAnim: true })
+  }
+
   // Deshacer: en el menú principal, mantener ✕ 1 s vuelve la sesión a como estaba antes de lo último.
   const canUndo = !dead && stack.length === 1 && !card && Boolean(session.undo)
   const undoNow = () => {
@@ -373,6 +381,23 @@ function PlayApp() {
     <div className="play" ref={rootRef} onPointerDownCapture={() => (ghostClick.current = false)}>
       <Hud onTurn={onTurn} healRequest={healRequest} />
       <DetailPanel item={item} onOpenCard={() => openCard(item)} />
+      {!dead && (
+        <div className="tabs" role="tablist">
+          {(['root', 'character'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              className="tab"
+              aria-selected={tab === m}
+              onClick={() => goTab(m)}
+              data-testid={m === 'root' ? 'play-tab-fight' : 'play-tab-character'}
+            >
+              {t(m === 'root' ? 'play.tab.fight' : 'play.tab.character')}
+            </button>
+          ))}
+        </div>
+      )}
       <div
         className="listwrap"
         onTouchStart={(e) => {
@@ -382,7 +407,7 @@ function PlayApp() {
         onTouchEnd={onTouchEnd}
       >
         <div className="crumb">
-          {dead ? t('hpState.dead') : crumb ? `${crumb} ›` : t('play.menu')}
+          {dead ? t('hpState.dead') : crumb ? `${crumb} ›` : ''}
           {canUndo && session.undo && (
             <span className="undo-hint" data-testid="play-undo">
               {' · ↶ '}
@@ -404,7 +429,6 @@ function PlayApp() {
       />
       {card && 'spell' in card && <SpellCard spell={card.spell} ctx={ctx} onClose={back} />}
       {card && 'detail' in card && <DetailCard detail={card.detail} onClose={back} />}
-      {turnCard && !dead && <TurnCard round={turnCard.round} notice={turnCard.notice} onClose={() => setTurnCard(null)} />}
       <div className="fx-overlay" ref={(el) => registerLayer('overlay', el)} />
       <div className="fx-slash" ref={(el) => registerLayer('slash', el)} />
       {!started && (

@@ -1,4 +1,5 @@
 import type { AttackLine, AttackVariant, ComputedSheet } from '../../core/compute'
+import type { Stat } from '../../core/modifiers'
 import type { Character, ModifierInput } from '../../core/schema'
 import type { Lang } from '../../i18n/useT'
 import type { MessageKey } from '../../i18n/es'
@@ -16,7 +17,8 @@ import {
   spendResource, startCombat, timesCast, timesPrepared, toggleCondition, toggleDefensive, toggleStance, touchHit, undoDeath, revive, type Session,
   chargeBlock, chargeDistance, chargeKind, currentSpeed, toggleSurprise, emptyFreeDraft, removeExternal, toggleCommonEffect,
   ready, endReadied, proneAc,
-  type FreeDraft, type SpellCounts, type TurnEffect, type TurnSummary,
+  turnUrgent,
+  type FreeDraft, type SpellCounts,
 } from '../../core/session'
 import { spells } from '../../data/spells'
 import { localBuff, localName, localNote, localSource, localSpell } from '../../data/names'
@@ -57,8 +59,7 @@ export interface MenuItem {
   section?: string // encabezado que va antes de este ítem
   badge?: { text: string; tone?: 'mana' | 'gold' | 'muted' | 'on' }
   // warn: aviso que va primero en la descripción (moribundo / incapacitado, ver gate())
-  // lineWarn: el renglón grande va en amarillo (aviso de MI TURNO con algo urgente)
-  detail: { title: string; tag?: string; stats?: DetailStat[]; line?: string; lineWarn?: boolean; note?: string; extra?: string; warn?: string }
+  detail: { title: string; tag?: string; stats?: DetailStat[]; line?: string; note?: string; extra?: string; warn?: string }
   spell?: { level: string; name: string } // si está, tocar el detalle abre la tarjeta
   hold?: boolean // se confirma manteniendo apretado (CONFIRMAR o la fila)
   act?: ActionKind // tipo de acción en el turno (gate() → core: checkAction / applyAction)
@@ -90,6 +91,8 @@ const diamonds = (left: number, total: number) => '◆'.repeat(left) + '◇'.rep
 const byNumber = (a: string, b: string) => Number(a) - Number(b)
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const onOff = (on: boolean): MenuItem['badge'] => ({ text: on ? 'ON' : 'OFF', tone: on ? 'on' : 'muted' })
+// En las listas para agregar (condiciones, efectos de otros): ✓ en lo que ya tenés
+const check = (on: boolean): MenuItem['badge'] => (on ? { text: '✓', tone: 'on' } : undefined)
 
 const weaponStats = (t: Translate, a: AttackLine, v: AttackVariant, attack = sv(v.attack.total)): DetailStat[] => [
   { id: 'attack', label: t('play.col.attack'), value: attack },
@@ -335,9 +338,80 @@ function root(c: MenuCtx): MenuItem[] {
     })
   }
   items.push(itemsRow(c))
-  // Personaje (id 'status', así los testids no cambian): habilidades, condiciones, efectos, notas, descanso y,
-  // en combate, Terminar combate
-  items.push({ id: 'status', label: tr('play.root.character'), detail: statusDetail(c), action: { type: 'open', menu: 'status' } })
+  // Estado: todo lo que tenés encima (condiciones y efectos), para quitarlo o agregar algo
+  const active = activeCount(session) + session.conditions.length
+  items.push({
+    id: 'state',
+    label: tr('play.state'),
+    badge: active ? { text: String(active), tone: 'on' } : undefined,
+    detail: statusDetail(c),
+    action: { type: 'open', menu: 'state' },
+  })
+  // Terminar combate: última fila de la pestaña de pelea, solo en combate (se confirma manteniendo apretado)
+  if (session.combat) items.push(combatItem(c))
+  return items
+}
+
+// Pestaña PERSONAJE: lo que no es pelear. Habilidades, Defensa, Preparar conjuros, Descansar y Notas.
+function character(c: MenuCtx): MenuItem[] {
+  const { sheet, session, t: tr } = c
+  // Vista previa del descanso: el mismo rest() del core sobre la sesión actual
+  const after = rest(sheet, session)
+  const preview = [
+    `${c.t('sheet.hp')} ${minus(String(currentHp(sheet, session)))}→${minus(String(currentHp(sheet, after)))}`,
+    ...sheet.resources.map((r) => `⚡ ${resourceLeft(sheet, session, r.id)}→${resourceLeft(sheet, after, r.id)}`),
+    ...(sheet.spellcasting[0]?.spellsPerDay ?? [])
+      .map((_, i) => String(i))
+      .filter((l) => !isCantrip(l) && preparedTotal(session.prepared, l) > 0)
+      .map((l) => `◆ ${slotsLeft(session, l)}→${slotsLeft(after, l)}`),
+  ].join(' · ')
+  return [
+    { id: 'skills', label: tr('play.root.skills'), detail: { title: tr('play.root.skills'), line: tr('play.diceNote') }, action: { type: 'open', menu: 'skills' } },
+    {
+      id: 'defense',
+      label: tr('play.defense'),
+      detail: { title: tr('play.defense'), line: `${tr('sheet.ac')} ${sheet.ac.normal.total} · ${tr('sheet.touch')} ${sheet.ac.touch.total} · ${tr('sheet.flatFooted')} ${sheet.ac.flatFooted.total}`, note: `${tr('sheet.cmd')} ${sheet.cmd.total} · ${tr('sheet.fort')} ${sv(sheet.saves.fort.total)} · ${tr('sheet.ref')} ${sv(sheet.saves.ref.total)} · ${tr('sheet.will')} ${sv(sheet.saves.will.total)}` },
+      action: { type: 'open', menu: 'defense' },
+    },
+    ...(sheet.spellcasting[0]
+      ? [{ id: 'prepare', label: tr('play.prepare'), detail: { title: tr('play.prepare'), line: tr('play.prepareNote') }, act: 'downtime', action: { type: 'open', menu: 'prepare' } } satisfies MenuItem]
+      : []),
+    { id: 'rest', label: tr('play.rest'), hold: true, act: 'downtime', detail: { title: tr('play.rest'), line: preview, note: tr('play.holdToRest') }, action: { type: 'rest' } },
+    // Notas del personaje (las del JSON): solo lectura; el 2do toque abre la tarjeta con el texto completo
+    ...(c.character.notes
+      ? [{ id: 'notes', label: tr('play.notes'), detail: { title: tr('play.notes'), line: c.character.notes }, action: { type: 'none' } } satisfies MenuItem]
+      : []),
+  ]
+}
+
+// Defensa: los valores en vivo (con buffs, postura y condiciones), uno por fila, para leer. El desglose va en el detalle.
+function defense(c: MenuCtx): MenuItem[] {
+  const { sheet, session, t: tr } = c
+  const named = (src: string) => localSource(c.lang, src)
+  const row = (id: string, label: string, stat: Stat | null, value: string, note?: string): MenuItem => ({
+    id: `defense-${id}`,
+    label,
+    badge: { text: value },
+    detail: { title: label, line: value, note: note ?? ((stat && statParts(tr, stat, false, named)) || undefined) },
+    action: { type: 'none' },
+  })
+  const ac = sheet.ac.normal.total
+  const items: MenuItem[] = [row('ac', tr('sheet.ac'), sheet.ac.normal, String(ac))]
+  // Tumbado: la CA cambia según quién ataca (core: proneAc)
+  const prone = proneAc(sheet, session)
+  if (prone) {
+    const why = (n: number) => `${ac} ${sv(n - ac)} (${localName(c.lang, 'prone', 'Prone')})`
+    items.push(row('ac-melee', tr('play.acMelee'), null, String(prone.melee), why(prone.melee)))
+    items.push(row('ac-ranged', tr('play.acRanged'), null, String(prone.ranged), why(prone.ranged)))
+  }
+  items.push(
+    row('touch', tr('sheet.touch'), sheet.ac.touch, String(sheet.ac.touch.total)),
+    row('flat', tr('sheet.flatFooted'), sheet.ac.flatFooted, String(sheet.ac.flatFooted.total)),
+    row('cmd', tr('sheet.cmd'), sheet.cmd, String(sheet.cmd.total)),
+    row('fort', tr('play.save.fort'), sheet.saves.fort, sv(sheet.saves.fort.total)),
+    row('ref', tr('play.save.ref'), sheet.saves.ref, sv(sheet.saves.ref.total)),
+    row('will', tr('play.save.will'), sheet.saves.will, sv(sheet.saves.will.total)),
+  )
   return items
 }
 
@@ -364,7 +438,7 @@ function contextItem(c: MenuCtx): MenuItem {
   const { session, t: tr } = c
   if (!session.combat) return combatItem(c)
   // En la ronda 0 solo se actúa en una sorpresa, con una sola acción: Repetir no sirve. La fila es Ronda sorpresa
-  // (ON/OFF) aunque ya hayas actuado, así se puede marcar o apagar hasta MI TURNO.
+  // (ON/OFF) aunque ya hayas actuado, así se puede marcar o apagar hasta NUEVO TURNO.
   const surprise = surpriseItem(c)
   if (surprise) return surprise
   const repeat = repeatItem(c)
@@ -497,7 +571,7 @@ function attack(c: MenuCtx): MenuItem[] {
     action: { type: 'execute', fx: 'actionExecute', after: 'root' },
   })
   items.push(...lateFullAttacks)
-  // Preparar una acción: queda anotada (chip) hasta que actuás o hasta MI TURNO (core: ready / afterAction / nextTurn)
+  // Preparar una acción: queda anotada (chip) hasta que actuás o hasta NUEVO TURNO (core: ready / afterAction / nextTurn)
   items.push({
     id: 'ready',
     label: tr('play.ready'),
@@ -565,18 +639,9 @@ function touchMenu(c: MenuCtx, variant: string, weaponId: string): MenuItem[] {
   ]
 }
 
+// Conjuros: solo para lanzar (Preparar está en la pestaña PERSONAJE)
 function spellsMenu(c: MenuCtx): MenuItem[] {
-  return [
-    ...castableItems(c),
-    {
-      id: 'prepare',
-      label: c.t('play.prepare'),
-      section: c.t('play.spellbook'),
-      detail: { title: c.t('play.prepare'), line: c.t('play.prepareNote') },
-      act: 'downtime',
-      action: { type: 'open', menu: 'prepare' },
-    },
-  ]
+  return castableItems(c)
 }
 
 function prepareMenu(c: MenuCtx): MenuItem[] {
@@ -723,50 +788,70 @@ function itemsMenu(c: MenuCtx): MenuItem[] {
 const bookLevel = (c: MenuCtx, name: string) =>
   Object.keys(c.character.spellbook).find((l) => c.character.spellbook[l]?.includes(name)) ?? '1'
 
-// Todo lo que está prendido y se puede apagar desde un solo lugar.
-function activeEffects(c: MenuCtx): MenuItem[] {
+// Cuándo se va cada cosa que tenés encima (badge de la fila en Estado):
+//   rounds → "quedan 9r" · turn → "hasta tu turno" (NUEVO TURNO lo saca) · combat → "fin del combate" · manual → "a mano"
+type Until = { kind: 'rounds'; n: number } | { kind: 'turn' | 'combat' | 'manual' }
+function untilBadge(c: MenuCtx, u: Until): MenuItem['badge'] {
+  const text = u.kind === 'rounds' ? fill(c.t('play.until.rounds'), { n: String(u.n) }) : c.t(`play.until.${u.kind}`)
+  return { text, tone: 'muted' }
+}
+const roundsOr = (n: number | undefined): Until => (n ? { kind: 'rounds', n } : { kind: 'combat' })
+
+// Estado: arriba, todo lo que tenés encima (efectos y condiciones), cada uno con cuándo se va; CONFIRMAR lo quita.
+// Abajo, agregar una condición o un efecto de otro.
+function stateMenu(c: MenuCtx): MenuItem[] {
   const { session, t: tr } = c
+  const remove = tr('play.remove')
   const items: MenuItem[] = []
+  const add = (it: MenuItem, until: Until) => items.push({ ...it, badge: untilBadge(c, until) })
   for (const name of session.buffs) {
     const item = c.character.equipment.items.find((i) => i.id === name)
+    const until = roundsOr(session.buffRounds[name])
+    const action: ItemAction = { type: 'toggle', on: false, update: (s) => endBuff(s, name) }
     // El buff de un objeto (Invisible) no tiene tarjeta de conjuro: muestra su nota
-    items.push(item
-      ? { id: `buff-${name}`, label: localBuff(c.lang, name), badge: onOff(true), detail: { title: localBuff(c.lang, name), line: localNote(c.lang, item.id, item.notes), note: tr('play.turnOff'), extra: itemDefs[name]?.endsOnAttack ? tr('play.invisibleDex') : undefined }, action: { type: 'toggle', on: false, update: (s) => endBuff(s, name) } }
-      : { id: `buff-${name}`, label: sn(c, name), badge: onOff(true), spell: { level: bookLevel(c, name), name }, detail: { title: sn(c, name), line: spellSummary(c, name), note: tr('play.turnOff') }, action: { type: 'toggle', on: false, update: (s) => endBuff(s, name) } })
+    add(item
+      ? { id: `buff-${name}`, label: localBuff(c.lang, name), detail: { title: localBuff(c.lang, name), line: localNote(c.lang, item.id, item.notes), note: remove, extra: itemDefs[name]?.endsOnAttack ? tr('play.invisibleDex') : undefined }, action }
+      : { id: `buff-${name}`, label: sn(c, name), spell: { level: bookLevel(c, name), name }, detail: { title: sn(c, name), line: spellSummary(c, name), note: remove }, action }, until)
   }
   if (session.enhancement) {
     const label = `${tr('play.enhance')} +${session.enhancement.bonus}`
-    items.push({ id: 'effect-enhancement', label, badge: onOff(true), detail: { title: label, line: tr('play.enhanceNote'), note: tr('play.turnOff') }, action: { type: 'toggle', on: false, update: endEnhancement } })
+    add({ id: 'effect-enhancement', label, detail: { title: label, line: tr('play.enhanceNote'), note: remove }, action: { type: 'toggle', on: false, update: endEnhancement } }, roundsOr(session.enhancement.rounds))
   }
   if (session.held) {
     const label = `${tr('play.held')}: ${sn(c, session.held.name)}${session.held.charges > 1 ? ` ×${session.held.charges}` : ''}`
-    items.push({ id: 'effect-held', label, badge: onOff(true), detail: { title: label, line: tr('play.dischargeNote'), note: tr('play.dropHeld') }, action: { type: 'toggle', on: false, update: dropHeld } })
+    add({ id: 'effect-held', label, detail: { title: label, line: tr('play.dischargeNote'), note: tr('play.dropHeld') }, action: { type: 'toggle', on: false, update: dropHeld } }, { kind: 'manual' })
   }
-  if (session.castDefensively) items.push(defensiveItem(c))
+  if (session.castDefensively) {
+    const it = defensiveItem(c)
+    add({ ...it, detail: { ...it.detail, note: [it.detail.note, remove].filter(Boolean).join(' · ') } }, { kind: 'manual' })
+  }
   if (session.charging) {
     const label = tr('play.charged')
-    items.push({ id: 'effect-charge', label, badge: onOff(true), detail: { title: label, line: `${tr('sheet.ac')} ${c.sheet.ac.normal.total} ${tr('play.untilYourTurn')}`, note: tr('play.turnOff') }, action: { type: 'toggle', on: false, update: endCharge } })
+    add({ id: 'effect-charge', label, detail: { title: label, line: `${tr('sheet.ac')} ${c.sheet.ac.normal.total} ${tr('play.untilYourTurn')}`, note: remove }, action: { type: 'toggle', on: false, update: endCharge } }, { kind: 'turn' })
   }
   if (session.readied) {
     const label = tr('play.readied')
-    items.push({ id: 'effect-readied', label, badge: onOff(true), detail: { title: label, line: tr('play.readyNote'), note: tr('play.turnOff') }, action: { type: 'toggle', on: false, update: endReadied } })
+    add({ id: 'effect-readied', label, detail: { title: label, line: tr('play.readyNote'), note: remove }, action: { type: 'toggle', on: false, update: endReadied } }, { kind: 'turn' })
   }
   if (session.stance && session.stance in STANCES) {
     const id = session.stance as StanceId
-    items.push({ id: `effect-stance`, label: tr(`stance.${id}`), badge: onOff(true), detail: { title: tr(`stance.${id}`), line: tr(`stanceNote.${id}`), note: tr('play.turnOff') }, action: { type: 'toggle', on: false, update: (s) => toggleStance(s, id) } })
+    add({ id: `effect-stance`, label: tr(`stance.${id}`), detail: { title: tr(`stance.${id}`), line: tr(`stanceNote.${id}`), note: remove }, action: { type: 'toggle', on: false, update: (s) => toggleStance(s, id) } }, { kind: 'turn' })
   }
-  // Lo ajeno (Bendecir, flanqueo, Libre): se apaga acá; al final, la fila para agregar uno.
+  // Lo ajeno (Bendecir, flanqueo, Libre)
   for (const e of session.external) {
     const label = externalLabel(tr, e)
-    items.push({
-      id: `ext-${e.id}`,
-      label: e.rounds ? `${label} ${e.rounds}r` : label,
-      badge: onOff(true),
-      detail: { title: label, line: modsText(tr, e.mods, true), note: `${e.rounds ? `${e.rounds}r` : tr('play.untilCombatEnd')} · ${tr('play.turnOff')}` },
-      action: { type: 'toggle', on: false, update: (s) => removeExternal(s, e.id) },
-    })
+    add({ id: `ext-${e.id}`, label, detail: { title: label, line: modsText(tr, e.mods, true), note: remove }, action: { type: 'toggle', on: false, update: (s) => removeExternal(s, e.id) } }, roundsOr(e.rounds))
   }
-  items.push({ id: 'add-effect', label: `+ ${tr('play.addEffect')}`, detail: { title: tr('play.addEffect'), line: tr('play.addEffectNote') }, action: { type: 'open', menu: 'effects-add' } })
+  // Condiciones prendidas: las mismas filas de la lista de condiciones
+  for (const it of conditions(c)) {
+    const id = it.id.replace(/^condition-/, '')
+    if (session.conditions.includes(id as ConditionId)) add({ ...it, detail: { ...it.detail, extra: [it.detail.extra, remove].filter(Boolean).join(' · ') } }, { kind: 'manual' })
+  }
+  if (items[0]) items[0] = { ...items[0], section: tr('play.state.have') }
+  items.push(
+    { id: 'add-condition', label: tr('play.addCondition'), section: tr('play.state.add'), detail: { title: tr('play.addCondition'), line: tr('play.addConditionNote') }, action: { type: 'open', menu: 'conditions' } },
+    { id: 'add-effect', label: tr('play.addEffect'), detail: { title: tr('play.addEffect'), line: tr('play.addEffectNote') }, action: { type: 'open', menu: 'effects-add' } },
+  )
   return items
 }
 
@@ -809,7 +894,7 @@ function effectsAdd(c: MenuCtx): MenuItem[] {
     return {
       id: `common-${id}`,
       label: `${name}  ${modsText(tr, COMMON_EFFECTS[id])}`,
-      badge: onOff(on),
+      badge: check(on),
       detail: { title: name, line: modsText(tr, COMMON_EFFECTS[id], true), note: tr('play.untilCombatEnd') },
       // Está 3 niveles adentro: al prenderlo o apagarlo vuelve al menú principal (como Libre › LISTO)
       action: { type: 'toggle', on: !on, update: (s) => toggleCommonEffect(s, id), after: 'root' },
@@ -845,8 +930,8 @@ const freePreview = (d: FreeDraft): ModifierInput[] =>
 const activeCount = (s: Session) =>
   s.buffs.length + (s.enhancement ? 1 : 0) + (s.held ? 1 : 0) + (s.castDefensively ? 1 : 0) + (s.stance ? 1 : 0) + (s.charging ? 1 : 0) + (s.readied ? 1 : 0) + s.external.length
 
-// Iniciar combate (fila de contexto del menú principal) / Terminar combate (al final de Personaje). El turno se
-// avanza con MI TURNO ▸ en el HUD.
+// Iniciar combate (fila de contexto del menú principal) / Terminar combate (al final de la pestaña de pelea). El turno se
+// avanza con NUEVO TURNO ▸ en el HUD.
 function combatItem(c: MenuCtx): MenuItem {
   const { sheet, session, t: tr } = c
   if (session.combat) {
@@ -879,7 +964,7 @@ function prebuffRounds(c: MenuCtx): Record<string, number> {
   return rounds
 }
 
-// Ronda sorpresa: solo antes del primer MI TURNO. Prendida, nada de ronda completa (core: actionLimit) y se apaga con MI TURNO.
+// Ronda sorpresa: solo antes del primer NUEVO TURNO. Prendida, nada de ronda completa (core: actionLimit) y se apaga con NUEVO TURNO.
 function surpriseItem(c: MenuCtx): MenuItem | null {
   const { session, t: tr } = c
   if (session.combat?.round !== 0) return null
@@ -893,39 +978,6 @@ function surpriseItem(c: MenuCtx): MenuItem | null {
   }
 }
 
-function status(c: MenuCtx): MenuItem[] {
-  const { sheet, session, t: tr } = c
-  // Vista previa del descanso: el mismo rest() del core sobre la sesión actual
-  const after = rest(sheet, session)
-  const preview = [
-    `${c.t('sheet.hp')} ${minus(String(currentHp(sheet, session)))}→${minus(String(currentHp(sheet, after)))}`,
-    ...sheet.resources.map((r) => `⚡ ${resourceLeft(sheet, session, r.id)}→${resourceLeft(sheet, after, r.id)}`),
-    ...(sheet.spellcasting[0]?.spellsPerDay ?? [])
-      .map((_, i) => String(i))
-      .filter((l) => !isCantrip(l) && preparedTotal(session.prepared, l) > 0)
-      .map((l) => `◆ ${slotsLeft(session, l)}→${slotsLeft(after, l)}`),
-  ].join(' · ')
-  const active = activeCount(session)
-  return [
-    { id: 'skills', label: tr('play.root.skills'), detail: { title: tr('play.root.skills'), line: tr('play.diceNote') }, action: { type: 'open', menu: 'skills' } },
-    { id: 'conditions', label: tr('play.conditions'), detail: statusDetail(c), action: { type: 'open', menu: 'conditions' } },
-    {
-      id: 'effects',
-      label: tr('play.activeEffects'),
-      badge: active ? { text: String(active), tone: 'on' } : undefined,
-      detail: { title: tr('play.activeEffects'), line: active ? `${active}` : tr('play.empty') },
-      action: { type: 'open', menu: 'effects' },
-    },
-    // Notas del personaje (las del JSON): solo lectura; el 2do toque abre la tarjeta con el texto completo
-    ...(c.character.notes
-      ? [{ id: 'notes', label: tr('play.notes'), detail: { title: tr('play.notes'), line: c.character.notes }, action: { type: 'none' } } satisfies MenuItem]
-      : []),
-    { id: 'rest', label: tr('play.rest'), hold: true, act: 'downtime', detail: { title: tr('play.rest'), line: preview, note: tr('play.holdToRest') }, action: { type: 'rest' } },
-    // Terminar combate: una vez por combate, acá abajo (el menú principal le deja el lugar a Objetos)
-    ...(session.combat ? [combatItem(c)] : []),
-  ]
-}
-
 function conditions(c: MenuCtx): MenuItem[] {
   return (Object.keys(CONDITIONS) as ConditionId[]).map((id): MenuItem => {
     const on = c.session.conditions.includes(id)
@@ -935,7 +987,7 @@ function conditions(c: MenuCtx): MenuItem[] {
     return {
       id: `condition-${id}`,
       label: localName(c.lang, id, capitalize(id)),
-      badge: onOff(on),
+      badge: check(on),
       detail: { title: localName(c.lang, id, capitalize(id)), line: proneLine ?? c.t(`conditionNote.${id}`), note: id === 'prone' ? c.t('play.proneStand') : undefined, extra: id === 'prone' ? c.t('play.proneCrawl') : undefined },
       action: { type: 'toggle', on: !on, update: (s) => toggleCondition(s, id) },
     }
@@ -970,7 +1022,12 @@ export function buildMenu(id: string, c: MenuCtx): MenuItem[] {
   const items = rawMenu(id, c)
   // Una lista vacía igual tiene una fila, para que el cursor y el detalle tengan algo que mostrar
   if (!items.length) return [withNav({ id: 'empty', label: c.t('play.empty'), detail: { title: c.t('play.empty') }, action: { type: 'none' } })]
-  return gate(items, c).map(withNav)
+  const gated = gate(items, c).map(withNav)
+  // En combate, lo urgente va primero en el detalle de la fila de contexto (↻ Repetir o Ronda sorpresa)
+  const urgent = id === 'root' && c.session.combat ? urgentWarn(c) : undefined
+  const first = gated[0]
+  if (urgent && first) gated[0] = { ...first, detail: { ...first.detail, warn: [urgent, first.detail.warn].filter(Boolean).join(' · ') } }
+  return gated
 }
 
 // Señalización de la fila (después de gate, que puede apagarla): submenú → ›; solo lectura → apagada.
@@ -995,8 +1052,9 @@ function rawMenu(id: string, c: MenuCtx): MenuItem[] {
     case 'recall': items = recallMenu(c, a); break
     case 'skills': items = skills(c); break
     case 'items': items = itemsMenu(c); break
-    case 'status': items = status(c); break
-    case 'effects': items = activeEffects(c); break
+    case 'character': items = character(c); break
+    case 'defense': items = defense(c); break
+    case 'state': items = stateMenu(c); break
     case 'conditions': items = conditions(c); break
     case 'effects-add': items = effectsAdd(c); break
     case 'effect-free': items = effectFree(c); break
@@ -1007,40 +1065,19 @@ function rawMenu(id: string, c: MenuCtx): MenuItem[] {
   return items
 }
 
-// Aviso de MI TURNO, para la pantalla de turno (los datos salen de core: turnSummary).
-//   título: la ronda · renglón grande: lo urgente (en amarillo) o, si no hay, lo que sigue activo con sus rondas ·
-//   abajo: lo que se apagó y lo que queda.
-export function turnNotice(c: MenuCtx, sum: TurnSummary): MenuItem['detail'] {
+// Lo urgente en combate (moribundo, tumbado, carga en la mano), en amarillo en el detalle de la fila de contexto de
+// Pelea: es lo primero que ves con NUEVO TURNO. Sale de la sesión de ahora (core: turnUrgent), así que también sigue
+// después de recargar.
+function urgentWarn(c: MenuCtx): string | undefined {
   const tr = c.t
-  const name = (e: TurnEffect): string => {
-    switch (e.kind) {
-      case 'buff': return localBuff(c.lang, e.id)
-      case 'enhancement': return `${tr('play.enhance')} +${e.bonus}`
-      case 'external': return externalLabel(tr, e.effect)
-      case 'stance': return e.id in STANCES ? tr(`stance.${e.id as StanceId}`) : e.id
-      case 'charging': return tr('play.charged')
-      case 'surprise': return tr('play.surprise')
-      case 'readied': return tr('play.readied')
-    }
-  }
-  const rounds = (e: TurnEffect) => ('rounds' in e && e.rounds ? ` ${e.rounds}r` : e.kind === 'external' && e.effect.rounds ? ` ${e.effect.rounds}r` : '')
-  const active = sum.active.map((e) => name(e) + rounds(e)).join(' · ')
-  const urgent = sum.urgent.map((u) => {
+  const texts = turnUrgent(c.sheet, c.session).map((u) => {
     switch (u.kind) {
       case 'dying': return fill(tr('play.turn.dying'), { mod: sv(u.conMod), dc: String(u.dc) })
       case 'prone': return tr('play.turn.prone')
       case 'held': return fill(tr('play.turn.held'), { spell: sn(c, u.name) })
     }
   })
-  const expired = sum.expired.length ? `${tr('play.turn.expired')}: ${sum.expired.map(name).join(' · ')}` : undefined
-  const remaining = urgent.length && active ? `${tr('play.turn.remaining')}: ${active}` : undefined
-  return {
-    title: fill(tr('play.turn.title'), { n: String(sum.round) }),
-    line: urgent.length ? `⚠ ${urgent.join(' · ')}` : active || tr('play.turn.nothing'),
-    lineWarn: urgent.length > 0,
-    note: expired,
-    extra: remaining,
-  }
+  return texts.length ? `⚠ ${texts.join(' · ')}` : undefined
 }
 const fill = (text: string, vars: Record<string, string>) => Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), text)
 
@@ -1048,7 +1085,7 @@ const fill = (text: string, vars: Record<string, string>) => Object.entries(vars
 // y va el aviso:
 //   moribundo      → se bloquea toda acción (act, incluidos Descansar y Preparar) y los menús que abren acciones;
 //   incapacitado   → se bloquea lo de ronda completa; lo estándar se puede, con el aviso, y al hacerlo resta 1 PG solo
-//                    (pasa a moribundo). MI TURNO no resta: la tirada de estabilización del moribundo es manual;
+//                    (pasa a moribundo). NUEVO TURNO no resta: la tirada de estabilización del moribundo es manual;
 //   ronda sorpresa → se bloquea lo de ronda completa, sin costo.
 // Quedan Personaje (habilidades para mirar, condiciones, efectos), Terminar combate y los PG del HUD.
 // Una fila que ya viene bloqueada (ej. Cargar enredado) conserva su aviso, salvo con moribundo.

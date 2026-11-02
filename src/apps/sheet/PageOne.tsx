@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import type { AttackLine, ComputedSheet, SkillLine } from '../../core/compute'
 import { useT } from '../../i18n/useT'
-import { conditionalTexts, damageTypeLabel, formatValue, prettyCrit, SKILL_SEP, statParts } from './labels'
+import { conditionalTexts, damageTypeLabel, formatValue, prettyCrit, resourceDetailLabel, SKILL_SEP, statParts } from './labels'
 import { localName, localSource } from '../../data/names'
 import { SheetHeader } from './SheetHeader'
 import { PlainLine, StatBox, StatLine } from './StatLine'
 
-// Página 1 de la oficial: cabecera, defensas, ataques, skills e idiomas.
+// Página 1, lo que se usa en la mesa: cabecera, PG, defensas, salvaciones, combate, armas y magia.
 export function PageOne({ sheet }: { sheet: ComputedSheet }) {
   const { t, lang } = useT()
-  const { ac, saves, languages } = sheet
+  const { ac, saves } = sheet
   const acParts = statParts(t, ac.normal, false, (s) => localSource(lang, s))
 
   return (
@@ -58,15 +58,41 @@ export function PageOne({ sheet }: { sheet: ComputedSheet }) {
       {sheet.attacks.map((a) => (
         <AttackCard key={a.id} attack={a} />
       ))}
-      <SkillsCard sheet={sheet} />
-      <section className="card">
-        <h2 className="card-title">{t('sheet.languages')}</h2>
-        <p className="line" data-testid="sheet-languages">
-          {languages.known.map((l) => localSource(lang, l)).join(' · ')}
-          {languages.pending > 0 && ` (+${languages.pending} ${t('sheet.languagesPending')})`}
-        </p>
-      </section>
+      <MagicCard sheet={sheet} />
     </>
+  )
+}
+
+// Magia: nivel de lanzador, concentración y fallo arcano de cada clase lanzadora, y los recursos de clase
+// (la Reserva arcana con su mejora máxima).
+function MagicCard({ sheet }: { sheet: ComputedSheet }) {
+  const { t, lang } = useT()
+  if (!sheet.spellcasting.length && !sheet.resources.length) return null
+  const many = sheet.spellcasting.length > 1
+  return (
+    <section className="card">
+      <h2 className="card-title">{t('sheet.section.magic')}</h2>
+      {sheet.spellcasting.map((sc) => {
+        const who = many ? ` (${localName(lang, sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)})` : ''
+        return (
+          <div key={sc.classId}>
+            <StatLine label={t('sheet.cl') + who} stat={sc.casterLevel} signed={false} testId="sheet-cl" />
+            <StatLine label={t('sheet.concentration')} stat={sc.concentration} testId="sheet-concentration" />
+            <PlainLine label={t('sheet.asf')} value={`${sc.arcaneSpellFailure}%`} testId="sheet-asf" />
+          </div>
+        )
+      })}
+      {sheet.resources.map((r) => (
+        <div key={r.id}>
+          <StatLine label={localName(lang, r.id, r.name)} stat={r.max} signed={false} testId={`sheet-resource-${r.id}`} />
+          {Object.entries(r.details).map(([k, v]) => (
+            <p key={k} className="stat-parts" data-testid={`sheet-resource-${r.id}-${k}`}>
+              {resourceDetailLabel(t, k)} {formatValue(v, true)}
+            </p>
+          ))}
+        </div>
+      ))}
+    </section>
   )
 }
 
@@ -113,8 +139,8 @@ function AttackCard({ attack }: { attack: AttackLine }) {
   )
 }
 
-// Por defecto solo las que tienen rangos; el botón muestra las demás.
-function SkillsCard({ sheet }: { sheet: ComputedSheet }) {
+// Habilidades (página 2). Por defecto solo las que tienen rangos; el botón muestra las demás.
+export function SkillsCard({ sheet }: { sheet: ComputedSheet }) {
   const { t, lang } = useT()
   const [showAll, setShowAll] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null) // un solo desglose abierto a la vez (no se guarda)

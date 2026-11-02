@@ -8,6 +8,12 @@ import { IssuesBanner } from './IssuesBanner'
 import { PageOne } from './PageOne'
 import { PageTwo } from './PageTwo'
 import { fire } from '../play/fx/effects'
+// Tipografías de la ficha, empaquetadas (andan offline): Marcellus para el nombre y los títulos,
+// Barlow Semi Condensed para el texto y los números. Solo los pesos que se usan, alfabeto latino.
+import '@fontsource/marcellus/latin-400.css'
+import '@fontsource/barlow-semi-condensed/latin-400.css'
+import '@fontsource/barlow-semi-condensed/latin-600.css'
+import '@fontsource/barlow-semi-condensed/latin-700.css'
 import './sheet.css'
 
 // Ficha de solo lectura en 2 páginas, como la oficial. Lo único que se toca es el cambio de página.

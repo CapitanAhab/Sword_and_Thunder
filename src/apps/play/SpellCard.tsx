@@ -3,8 +3,8 @@ import { spells } from '../../data/spells'
 import { localSchool, localSpell } from '../../data/names'
 import { spellDamage, spellDc, spellRangeText, type MenuCtx } from './menus'
 
-// Tarjeta completa del conjuro (con scroll). ✕ o VOLVER la cierran.
-export function SpellCard({ spell, ctx, onClose }: { spell: { level: string; name: string }; ctx: MenuCtx; onClose: () => void }) {
+// Tarjeta completa del conjuro (mismo marco que DetailCard, con scroll). ✕ o VOLVER la cierran.
+export function SpellCard({ spell, ctx, where, onClose }: { spell: { level: string; name: string }; ctx: MenuCtx; where?: string; onClose: () => void }) {
   const { t, lang } = useT()
   const def = spells[spell.name]
   const dc = spellDc(ctx, spell.level, spell.name)
@@ -22,16 +22,19 @@ export function SpellCard({ spell, ctx, onClose }: { spell: { level: string; nam
     : []
 
   return (
-    <div className="spell-card" role="dialog" aria-label={localSpell(lang, spell.name)} data-testid="play-spell-card">
-      <div className="spell-card-body">
-        <h2>{localSpell(lang, spell.name)}</h2>
-        <p className="spell-school">
+    <div className="pcard" role="dialog" aria-label={localSpell(lang, spell.name)} data-testid="play-spell-card">
+      <div className="pcard-body">
+        {where && <p className="pcard-where">{where}</p>}
+        <div className="pcard-head">
+          <h2>{localSpell(lang, spell.name)}</h2>
+        </div>
+        <p className="pcard-sub">
           {level}
           {def && ` · ${localSchool(lang, def.school)}`}
         </p>
         {def ? (
           <>
-            <dl>
+            <dl className="pcard-rows">
               {rows.map(([k, v]) => (
                 <div key={k}>
                   <dt>{k}</dt>
@@ -39,13 +42,13 @@ export function SpellCard({ spell, ctx, onClose }: { spell: { level: string; nam
                 </div>
               ))}
             </dl>
-            <p className="spell-text">{def.text[lang]}</p>
+            <p className="pcard-text">{def.text[lang]}</p>
           </>
         ) : (
-          <p className="spell-text">{t('play.unknownSpell')}</p>
+          <p className="pcard-text">{t('play.unknownSpell')}</p>
         )}
       </div>
-      <button type="button" className="spell-card-close" onClick={onClose} data-testid="play-spell-card-close">
+      <button type="button" className="pcard-close" onClick={onClose} data-testid="play-spell-card-close">
         ✕ {t('play.close')}
       </button>
     </div>

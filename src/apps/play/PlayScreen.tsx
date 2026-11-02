@@ -70,6 +70,19 @@ function fixText(t: Translate, lang: Lang, fix: SessionFix): string {
 type Frame = { menu: string; sel: number; label: string }
 const SWIPE_PX = 60
 
+// Pantalla completa en el celular, para que las barras del navegador no le coman lugar al menú. Solo con pantalla
+// táctil (en la PC no) y si no corre ya como app instalada. El navegador solo la da justo después de un toque,
+// por eso se pide al empezar y otra vez al tocar si se salió (por ejemplo, con el gesto de volver de Android).
+// En iPhone no existe para una página: ahí no hace nada.
+function fireFullscreen() {
+  if (typeof document === 'undefined' || document.fullscreenElement) return
+  const el = document.documentElement
+  if (typeof el.requestFullscreen !== 'function') return
+  if (!window.matchMedia?.('(pointer: coarse)').matches) return
+  if (window.matchMedia?.('(display-mode: standalone)').matches) return
+  el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
+}
+
 // Lo que sobrevive al ir a la ficha (📄) y volver (▶ JUGAR): sin "Tocá para empezar" y en el mismo menú y cursor.
 // Vive en memoria, así que al recargar se vuelve a empezar (el navegador pide un toque para el audio).
 const resume: { started: boolean; stack: Frame[]; draft: SpellCounts; showAllSkills: boolean } = {
@@ -340,17 +353,24 @@ function PlayApp() {
   const start = () => {
     unlockAudio()
     setStarted(true)
+    fireFullscreen()
     fire('start', { target: rootRef.current })
   }
 
-  // Swipe → vuelve (si el gesto es más vertical que horizontal, es scroll)
+  // Deslizar (si el gesto es más vertical que horizontal, es scroll). Pelea está a la izquierda y Personaje a la
+  // derecha: → siempre es "para atrás" (en un submenú vuelve; en la raíz de Personaje va a Pelea) y ← en la raíz
+  // de Pelea va a Personaje. Dentro de un submenú, ← no hace nada, para no saltar de pestaña en medio de algo.
   const onTouchEnd = (e: TouchEvent) => {
     const end = e.changedTouches[0]
     const begin = touch.current
     touch.current = null
     if (!begin || !end) return
     const dx = end.clientX - begin.x
-    if (dx > SWIPE_PX && Math.abs(dx) > Math.abs(end.clientY - begin.y)) back()
+    if (Math.abs(dx) <= SWIPE_PX || Math.abs(dx) <= Math.abs(end.clientY - begin.y)) return
+    if (dx > 0) {
+      if (stack.length > 1) back()
+      else if (tab === 'character') goTab('root')
+    } else if (stack.length === 1 && tab === 'root') goTab('character')
   }
 
   const crumb = stack.slice(1).map((f) => f.label).join(' › ')
@@ -368,6 +388,9 @@ function PlayApp() {
     fire('cursor', { noAnim: true })
   }
 
+  // Dónde estás, para el encabezado de las tarjetas: "Personaje › Defensa"
+  const where = [t(tab === 'root' ? 'play.tab.fight' : 'play.tab.character'), ...stack.slice(1).map((f) => f.label)].join(' › ')
+
   // Deshacer: en el menú principal, mantener ✕ 1 s vuelve la sesión a como estaba antes de lo último.
   const canUndo = !dead && stack.length === 1 && !card && Boolean(session.undo)
   const undoNow = () => {
@@ -378,45 +401,63 @@ function PlayApp() {
   }
 
   return (
-    <div className="play" ref={rootRef} onPointerDownCapture={() => (ghostClick.current = false)}>
+    <div
+      className="play"
+      ref={rootRef}
+      onPointerDownCapture={() => (ghostClick.current = false)}
+      onPointerUpCapture={() => started && fireFullscreen()}
+    >
       <Hud onTurn={onTurn} healRequest={healRequest} />
-      <DetailPanel item={item} onOpenCard={() => openCard(item)} />
-      {!dead && (
-        <div className="tabs" role="tablist">
-          {(['root', 'character'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              className="tab"
-              aria-selected={tab === m}
-              onClick={() => goTab(m)}
-              data-testid={m === 'root' ? 'play-tab-fight' : 'play-tab-character'}
-            >
-              {t(m === 'root' ? 'play.tab.fight' : 'play.tab.character')}
-            </button>
-          ))}
-        </div>
-      )}
       <div
-        className="listwrap"
+        className="navwrap"
         onTouchStart={(e) => {
           const p = e.touches[0]
           touch.current = p ? { x: p.clientX, y: p.clientY } : null
         }}
         onTouchEnd={onTouchEnd}
       >
+        {/* Fila de la pestaña: dónde estás (⚔ Pelea, o Pelea › Ataques ›) y los puntitos ● ○, que también se tocan */}
         <div className="crumb">
-          {dead ? t('hpState.dead') : crumb ? `${crumb} ›` : ''}
-          {canUndo && session.undo && (
-            <span className="undo-hint" data-testid="play-undo">
-              {' · ↶ '}
-              {session.undo.label}
+          <span className="crumb-text">
+            {dead ? (
+              t('hpState.dead')
+            ) : (
+              <>
+                <span className="crumb-tab">{t(tab === 'root' ? 'play.tab.fight' : 'play.tab.character')}</span>
+                {crumb && ` › ${crumb} ›`}
+              </>
+            )}
+            {canUndo && session.undo && (
+              <span className="undo-hint" data-testid="play-undo">
+                {' · ↶ '}
+                {session.undo.label}
+              </span>
+            )}
+          </span>
+          {!dead && (
+            <span className="tab-dots" role="tablist">
+              {(['root', 'character'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  className="tab-dot"
+                  aria-selected={tab === m}
+                  aria-label={t(m === 'root' ? 'play.tab.fight' : 'play.tab.character')}
+                  onClick={() => goTab(m)}
+                  data-testid={m === 'root' ? 'play-tab-fight' : 'play-tab-character'}
+                >
+                  {tab === m ? '●' : '○'}
+                </button>
+              ))}
             </span>
           )}
         </div>
-        <CursorList items={items} sel={sel} onTap={onTap} onHold={onHold} listRef={listRef} />
+        <div className="listwrap">
+          <CursorList items={items} sel={sel} onTap={onTap} onHold={onHold} listRef={listRef} />
+        </div>
       </div>
+      <DetailPanel item={item} onOpenCard={() => openCard(item)} />
       <ActionBar
         mode={editing ? 'prepare' : 'menu'}
         hold={!editing && Boolean(item.hold)}
@@ -427,8 +468,8 @@ function PlayApp() {
         onUp={() => (editing ? adjust(-1) : select(sel - 1))}
         onDown={() => (editing ? adjust(1) : select(sel + 1))}
       />
-      {card && 'spell' in card && <SpellCard spell={card.spell} ctx={ctx} onClose={back} />}
-      {card && 'detail' in card && <DetailCard detail={card.detail} onClose={back} />}
+      {card && 'spell' in card && <SpellCard spell={card.spell} ctx={ctx} where={where} onClose={back} />}
+      {card && 'detail' in card && <DetailCard detail={card.detail} where={where} onClose={back} />}
       <div className="fx-overlay" ref={(el) => registerLayer('overlay', el)} />
       <div className="fx-slash" ref={(el) => registerLayer('slash', el)} />
       {!started && (

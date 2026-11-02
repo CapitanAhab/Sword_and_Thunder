@@ -10,7 +10,7 @@ import { fire, hpBarMs, isMuted, setMuted, type HpSide } from './fx/effects'
 import { externalLabel } from './menus'
 
 // HUD de arriba: solo mirar. Interacciones: la barra de HP (tocar → [−] 7/11 (−4) [+], se aplica sola a los 1,5 s)
-// y, en combate, NUEVO TURNO ▸ (onTurn: avanza la ronda y vuelve a la pestaña Pelea).
+// y, en combate, el botón ▸▸ de nuevo turno (onTurn: avanza la ronda y vuelve a la pestaña Pelea).
 // healRequest: cada vez que cambia (se tomó una poción de curar), se abre el editor para sumar la cura.
 const APPLY_MS = 1500
 const HOLD_MS = 400
@@ -115,8 +115,8 @@ export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healReque
             <span className="hud-name hud-round" data-testid="hud-round">
               ⚔ {combat.round ? `${t('play.round')} ${combat.round}` : t('play.combat')}
             </span>
-            <button type="button" className="hud-turn" onClick={onTurn} data-testid="btn-turn">
-              {t('play.newTurn')}
+            <button type="button" className="hud-turn" onClick={onTurn} aria-label={t('play.newTurn')} title={t('play.newTurn')} data-testid="btn-turn">
+              ▸▸
             </button>
           </>
         ) : (

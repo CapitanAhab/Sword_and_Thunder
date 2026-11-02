@@ -1,162 +1,203 @@
 import { useState } from 'react'
 import type { AttackLine, ComputedSheet, SkillLine } from '../../core/compute'
 import { useT } from '../../i18n/useT'
-import { conditionalTexts, damageTypeLabel, formatValue, prettyCrit, resourceDetailLabel, SKILL_SEP, statParts } from './labels'
+import { damageTypeLabel, formatValue, prettyCrit, resourceDetailLabel, SKILL_SEP, statParts } from './labels'
 import { localName, localSource } from '../../data/names'
 import { SheetHeader } from './SheetHeader'
-import { PlainLine, StatBox, StatLine } from './StatLine'
+import { BigStat, Block, Conds, MiniPlain, MiniStat, OpenParts, type PanelStat } from './StatLine'
 
-// Página 1, lo que se usa en la mesa: cabecera, PG, defensas, salvaciones, combate, armas y magia.
+// Página 1, lo que se usa en la mesa, como un panel (una superficie con separadores, sin cajitas): cabecera y
+// atributos · PG, CA e Inic en grande · salvaciones · armas · combate · magia. El desglose de un número aparece al
+// tocarlo, debajo de su bloque; uno abierto a la vez (tocar otro lo cambia, tocar el mismo lo cierra).
 export function PageOne({ sheet }: { sheet: ComputedSheet }) {
-  const { t, lang } = useT()
+  const { t } = useT()
+  const [open, setOpen] = useState<string | null>(null)
+  const toggle = (id: string) => setOpen((cur) => (cur === id ? null : id))
+  const tap = { open, onToggle: toggle }
+  const is = (i: PanelStat) => ({ item: i, open: open === i.testId, onToggle: toggle })
   const { ac, saves } = sheet
-  const acParts = statParts(t, ac.normal, false, (s) => localSource(lang, s))
+
+  const big: PanelStat[] = [
+    { testId: 'sheet-hp', label: t('sheet.hp'), stat: sheet.hp, signed: false, icon: '♥', tone: 'blood' },
+    { testId: 'sheet-ac', label: t('sheet.ac'), stat: ac.normal, signed: false, icon: '⛨', tone: 'plain' },
+    { testId: 'sheet-init', label: t('sheet.init'), stat: sheet.initiative, icon: '⚡', tone: 'bolt' },
+  ]
+  const acMore: PanelStat[] = [
+    { testId: 'sheet-ac-touch', label: t('sheet.touch'), stat: ac.touch, signed: false },
+    { testId: 'sheet-ac-flat', label: t('sheet.flatFooted'), stat: ac.flatFooted, signed: false },
+  ]
+  const saveItems: PanelStat[] = [
+    { testId: 'sheet-save-fort', label: t('play.save.fort'), stat: saves.fort },
+    { testId: 'sheet-save-ref', label: t('play.save.ref'), stat: saves.ref },
+    { testId: 'sheet-save-will', label: t('play.save.will'), stat: saves.will },
+  ]
+  const combat: PanelStat[] = [
+    { testId: 'sheet-cmb', label: t('sheet.cmb'), stat: sheet.cmb },
+    { testId: 'sheet-cmd', label: t('sheet.cmd'), stat: sheet.cmd, signed: false },
+    { testId: 'sheet-speed', label: t('sheet.speed'), stat: sheet.speed, signed: false, suffix: t('sheet.ft') },
+  ]
+  const defense = [...big, ...acMore]
 
   return (
-    <>
-      <SheetHeader sheet={sheet} />
-      <section className="card">
-        <h2 className="card-title">{t('sheet.section.hpInit')}</h2>
-        <StatLine label={t('sheet.hp')} stat={sheet.hp} signed={false} testId="sheet-hp" />
-        <StatLine label={t('sheet.init')} stat={sheet.initiative} testId="sheet-init" />
-      </section>
-      <section className="card">
-        <h2 className="card-title">{t('sheet.section.defense')}</h2>
-        <div className="stat-boxes">
-          <StatBox label={t('sheet.ac')} stat={ac.normal} signed={false} testId="sheet-ac" />
-          <StatBox label={t('sheet.touch')} stat={ac.touch} signed={false} testId="sheet-ac-touch" />
-          <StatBox label={t('sheet.flatFooted')} stat={ac.flatFooted} signed={false} testId="sheet-ac-flat" />
+    <div className="panel">
+      <SheetHeader sheet={sheet} {...tap} />
+      <Block>
+        <div className="big-stats">
+          {big.map((i) => (
+            <BigStat key={i.testId} {...is(i)} />
+          ))}
         </div>
-        {/* El desglose de la CA es largo: va debajo de las cajitas */}
-        {acParts && (
-          <p className="stat-parts">
-            {t('sheet.ac')} <span aria-hidden>= </span>
-            <span data-testid="sheet-ac-parts">{acParts}</span>
-          </p>
-        )}
-        {conditionalTexts(t, ac.normal, false).map((c) => (
-          <p key={c} className="stat-cond" data-testid="sheet-ac-conditional">
-            {c}
-          </p>
-        ))}
-      </section>
-      <section className="card">
-        <h2 className="card-title">{t('sheet.section.saves')}</h2>
-        <div className="stat-boxes">
-          <StatBox label={t('sheet.fort')} stat={saves.fort} testId="sheet-save-fort" withParts />
-          <StatBox label={t('sheet.ref')} stat={saves.ref} testId="sheet-save-ref" withParts />
-          <StatBox label={t('sheet.will')} stat={saves.will} testId="sheet-save-will" withParts />
+        <div className="mini-row mini-center">
+          {acMore.map((i) => (
+            <MiniStat key={i.testId} {...is(i)} />
+          ))}
         </div>
-      </section>
-      <section className="card">
-        <h2 className="card-title">{t('sheet.section.combat')}</h2>
-        <PlainLine label={t('sheet.bab')} value={formatValue(sheet.bab, true)} testId="sheet-bab" />
-        <StatLine label={t('sheet.cmb')} stat={sheet.cmb} testId="sheet-cmb" />
-        <StatLine label={t('sheet.cmd')} stat={sheet.cmd} signed={false} testId="sheet-cmd" />
-        <StatLine label={t('sheet.speed')} stat={sheet.speed} signed={false} suffix={t('sheet.ft')} testId="sheet-speed" />
-      </section>
+        <OpenParts items={defense} open={open} />
+        <Conds items={defense} />
+      </Block>
+      <Block>
+        <div className="big-stats">
+          {saveItems.map((i) => (
+            <BigStat key={i.testId} {...is(i)} small />
+          ))}
+        </div>
+        <OpenParts items={saveItems} open={open} />
+        <Conds items={saveItems} />
+      </Block>
       {sheet.attacks.map((a) => (
-        <AttackCard key={a.id} attack={a} />
+        <AttackBlock key={a.id} attack={a} {...tap} />
       ))}
-      <MagicCard sheet={sheet} />
-    </>
+      <Block title={t('sheet.section.combat')}>
+        <div className="sheet-grid">
+          <MiniPlain label={t('sheet.bab')} value={formatValue(sheet.bab, true)} testId="sheet-bab" />
+          {combat.map((i) => (
+            <MiniStat key={i.testId} {...is(i)} />
+          ))}
+        </div>
+        <OpenParts items={combat} open={open} />
+        <Conds items={combat} />
+      </Block>
+      <MagicBlock sheet={sheet} {...tap} />
+    </div>
   )
 }
 
 // Magia: nivel de lanzador, concentración y fallo arcano de cada clase lanzadora, y los recursos de clase
 // (la Reserva arcana con su mejora máxima).
-function MagicCard({ sheet }: { sheet: ComputedSheet }) {
+function MagicBlock({ sheet, open, onToggle }: { sheet: ComputedSheet; open: string | null; onToggle: (id: string) => void }) {
   const { t, lang } = useT()
   if (!sheet.spellcasting.length && !sheet.resources.length) return null
   const many = sheet.spellcasting.length > 1
+  const is = (i: PanelStat) => ({ item: i, open: open === i.testId, onToggle })
+  const casting = sheet.spellcasting.map((sc) => {
+    const who = many ? ` (${localName(lang, sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)})` : ''
+    const items: PanelStat[] = [
+      { testId: 'sheet-cl', label: t('sheet.cl') + who, stat: sc.casterLevel, signed: false },
+      { testId: 'sheet-concentration', label: t('sheet.concentration'), stat: sc.concentration },
+    ]
+    return { sc, items }
+  })
+  const resources: PanelStat[] = sheet.resources.map((r) => ({ testId: `sheet-resource-${r.id}`, label: localName(lang, r.id, r.name), stat: r.max, signed: false }))
+  const all = [...casting.flatMap((c) => c.items), ...resources]
   return (
-    <section className="card">
-      <h2 className="card-title">{t('sheet.section.magic')}</h2>
-      {sheet.spellcasting.map((sc) => {
-        const who = many ? ` (${localName(lang, sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)})` : ''
-        return (
-          <div key={sc.classId}>
-            <StatLine label={t('sheet.cl') + who} stat={sc.casterLevel} signed={false} testId="sheet-cl" />
-            <StatLine label={t('sheet.concentration')} stat={sc.concentration} testId="sheet-concentration" />
-            <PlainLine label={t('sheet.asf')} value={`${sc.arcaneSpellFailure}%`} testId="sheet-asf" />
-          </div>
-        )
-      })}
-      {sheet.resources.map((r) => (
-        <div key={r.id}>
-          <StatLine label={localName(lang, r.id, r.name)} stat={r.max} signed={false} testId={`sheet-resource-${r.id}`} />
-          {Object.entries(r.details).map(([k, v]) => (
-            <p key={k} className="stat-parts" data-testid={`sheet-resource-${r.id}-${k}`}>
-              {resourceDetailLabel(t, k)} {formatValue(v, true)}
-            </p>
-          ))}
-        </div>
-      ))}
-    </section>
+    <Block title={t('sheet.section.magic')} arcane>
+      <div className="sheet-grid">
+        {casting.map(({ sc, items }) => [
+          ...items.map((i) => <MiniStat key={i.testId} {...is(i)} />),
+          <MiniPlain key={`${sc.classId}-asf`} label={t('sheet.asf')} value={`${sc.arcaneSpellFailure}%`} testId="sheet-asf" />,
+        ])}
+        {sheet.resources.map((r, idx) => {
+          const item = resources[idx]
+          return (
+            item && [
+              <MiniStat key={r.id} {...is(item)} />,
+              ...Object.entries(r.details).map(([k, v]) => (
+                <span key={`${r.id}-${k}`} className="tap-stat mini-stat">
+                  <span className="stat-label">{resourceDetailLabel(t, k)}</span>{' '}
+                  <b className="mini-value" data-testid={`sheet-resource-${r.id}-${k}`}>
+                    {formatValue(v, true)}
+                  </b>
+                </span>
+              )),
+            ]
+          )
+        })}
+      </div>
+      <OpenParts items={all} open={open} />
+      <Conds items={all} />
+    </Block>
   )
 }
 
-function AttackCard({ attack }: { attack: AttackLine }) {
+// Un arma: el nombre con crítico · tipo · alcance, y una fila por variante (ataque y daño). Tocar una variante
+// abre su desglose del ataque y el del daño.
+function AttackBlock({ attack, open, onToggle }: { attack: AttackLine; open: string | null; onToggle: (id: string) => void }) {
   const { t, lang } = useT()
   const named = (s: string) => localSource(lang, s)
   const meta = [prettyCrit(attack.critical), attack.damageType && damageTypeLabel(t, attack.damageType), attack.range && `${attack.range} ${t('sheet.ft')}`]
   const damageParts = attack.variants[0] ? statParts(t, attack.variants[0].damage, true, named) : ''
+  const nameOf = (id: string, fallback: string) => (id === 'standard' ? t('sheet.attack.standard') : localName(lang, id, fallback))
+  const openVariant = attack.variants.find((v) => open === `sheet-attack-${attack.id}-${v.id}`)
+  const openParts = openVariant ? statParts(t, openVariant.attack, true, named) : ''
 
   return (
-    <section className="card">
-      <h2 className="card-title">
-        {localName(lang, attack.id, attack.name)} <span className="card-title-meta">{meta.filter(Boolean).join(' · ')}</span>
-      </h2>
+    <Block
+      title={localName(lang, attack.id, attack.name)}
+      meta={meta.filter(Boolean).map((m) => (
+        <span key={String(m)}>{m}</span>
+      ))}
+    >
       {attack.variants.map((v) => {
-        const name = v.id === 'standard' ? t('sheet.attack.standard') : localName(lang, v.id, v.name)
         const testId = `sheet-attack-${attack.id}-${v.id}`
-        const parts = statParts(t, v.attack, true, named)
-        return (
-          <div key={v.id} className="attack-row">
-            <span>{name}</span>
+        const tappable = Boolean(statParts(t, v.attack, true, named) || damageParts)
+        const cells = (
+          <>
+            <span className="attack-name">{nameOf(v.id, v.name)}</span>
             <span className="attack-bonus" data-testid={testId}>
               {v.fullAttack.map((b) => formatValue(b, true)).join('/')}
             </span>
             <span className="attack-damage" data-testid={`${testId}-damage`}>
               {v.damageText}
             </span>
-            {parts && (
-              <span className="stat-parts attack-parts">
-                <span aria-hidden>= </span>
-                <span data-testid={`${testId}-parts`}>{parts}</span>
-              </span>
-            )}
+          </>
+        )
+        return tappable ? (
+          <button key={v.id} type="button" className="attack-row tap-row" aria-expanded={open === testId} onClick={() => onToggle(testId)}>
+            {cells}
+          </button>
+        ) : (
+          <div key={v.id} className="attack-row">
+            {cells}
           </div>
         )
       })}
-      {damageParts && (
-        <p className="stat-parts">
+      {openVariant && openParts && (
+        <p className="stat-parts panel-parts">
+          {nameOf(openVariant.id, openVariant.name)} <span aria-hidden>= </span>
+          <span data-testid={`sheet-attack-${attack.id}-${openVariant.id}-parts`}>{openParts}</span>
+        </p>
+      )}
+      {openVariant && damageParts && (
+        <p className="stat-parts panel-parts">
           {t('sheet.damage')} <span aria-hidden>= </span>
           <span data-testid={`sheet-attack-${attack.id}-damage-parts`}>{damageParts}</span>
         </p>
       )}
-    </section>
+    </Block>
   )
 }
 
-// Habilidades (página 2). Por defecto solo las que tienen rangos; el botón muestra las demás.
+// Habilidades (página 2, dentro de su plegable). Por defecto solo las que tienen rangos; el botón muestra las demás.
 export function SkillsCard({ sheet }: { sheet: ComputedSheet }) {
   const { t, lang } = useT()
   const [showAll, setShowAll] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null) // un solo desglose abierto a la vez (no se guarda)
   // Orden alfabético por el nombre que se ve (cambia con el idioma)
   const byName = (a: SkillLine, b: SkillLine) => localName(lang, a.id, a.name).localeCompare(localName(lang, b.id, b.name), lang)
-  const { available, spent } = sheet.skillRanks
   const visible = (showAll ? sheet.skills : sheet.skills.filter((s) => s.ranks > 0)).slice().sort(byName)
 
   return (
-    <section className="card">
-      <h2 className="card-title card-title-split">
-        {t('sheet.skills')}
-        <span>
-          {t('sheet.ranks')} <span data-testid="sheet-skill-ranks">{spent}/{available}</span>
-        </span>
-      </h2>
+    <>
       <ul className="skill-list">
         {visible.map((s) => (
           <SkillRow key={s.id} skill={s} open={openId === s.id} onToggle={() => setOpenId((id) => (id === s.id ? null : s.id))} />
@@ -166,7 +207,7 @@ export function SkillsCard({ sheet }: { sheet: ComputedSheet }) {
       <button type="button" className="text-btn" onClick={() => setShowAll((v) => !v)} data-testid="sheet-skills-toggle">
         {showAll ? `${t('sheet.skills.showTrained')} ▴` : `${t('sheet.skills.showAll')} ${sheet.skills.length} ▾`}
       </button>
-    </section>
+    </>
   )
 }
 

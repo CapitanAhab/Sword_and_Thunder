@@ -24,7 +24,7 @@ import { spells } from '../../data/spells'
 import { localBuff, localName, localNote, localSource, localSpell } from '../../data/names'
 import { items as itemDefs } from '../../data/items'
 import type { FxEvent } from './fx/effects'
-import { actionNoteLabel, componentLabel, formatValue, minus, prettyCrit, SKILL_SEP, slotLabel, statParts, type Translate } from '../sheet/labels'
+import { actionNoteLabel, componentLabel, formatValue, minus, prettyCrit, SKILL_SEP, slotLabel, statParts, statRows, type StatRow, type Translate } from '../sheet/labels'
 
 // Árbol del menú de #/play a partir de la ficha calculada + la sesión. Solo arma textos y acciones:
 // los números salen de computeSheet y las reglas de core/session.ts.
@@ -59,7 +59,8 @@ export interface MenuItem {
   section?: string // encabezado que va antes de este ítem
   badge?: { text: string; tone?: 'mana' | 'gold' | 'muted' | 'on' }
   // warn: aviso que va primero en la descripción (moribundo / incapacitado, ver gate())
-  detail: { title: string; tag?: string; stats?: DetailStat[]; line?: string; note?: string; extra?: string; warn?: string }
+  // parts: el desglose en filas, solo para la tarjeta (en la franja se ve como `note`)
+  detail: { title: string; tag?: string; stats?: DetailStat[]; line?: string; note?: string; extra?: string; warn?: string; parts?: StatRow[] }
   spell?: { level: string; name: string } // si está, tocar el detalle abre la tarjeta
   hold?: boolean // se confirma manteniendo apretado (CONFIRMAR o la fila)
   act?: ActionKind // tipo de acción en el turno (gate() → core: checkAction / applyAction)
@@ -385,6 +386,9 @@ function character(c: MenuCtx): MenuItem[] {
 }
 
 // Defensa: los valores en vivo (con buffs, postura y condiciones), uno por fila, para leer. El desglose va en el detalle.
+// Filas del desglose para la tarjeta: sin filas (o sin stat), no se mandan
+const partsOf = (rows: StatRow[] | null | undefined) => (rows && rows.length ? rows : undefined)
+
 function defense(c: MenuCtx): MenuItem[] {
   const { sheet, session, t: tr } = c
   const named = (src: string) => localSource(c.lang, src)
@@ -392,7 +396,7 @@ function defense(c: MenuCtx): MenuItem[] {
     id: `defense-${id}`,
     label,
     badge: { text: value },
-    detail: { title: label, line: value, note: note ?? ((stat && statParts(tr, stat, false, named)) || undefined) },
+    detail: { title: label, line: value, note: note ?? ((stat && statParts(tr, stat, false, named)) || undefined), parts: partsOf(stat && statRows(tr, stat, false, named)) },
     action: { type: 'none' },
   })
   const ac = sheet.ac.normal.total
@@ -751,7 +755,12 @@ function skills(c: MenuCtx): MenuItem[] {
       id: `skill-${s.id}`,
       label: localName(c.lang, s.id, s.name),
       badge: { text: sv(s.stat.total) },
-      detail: { title: localName(c.lang, s.id, s.name), line: sv(s.stat.total), note: statParts(tr, s.stat, true, (src) => localSource(c.lang, src), SKILL_SEP) },
+      detail: {
+        title: localName(c.lang, s.id, s.name),
+        line: sv(s.stat.total),
+        note: statParts(tr, s.stat, true, (src) => localSource(c.lang, src), SKILL_SEP),
+        parts: partsOf(statRows(tr, s.stat, true, (src) => localSource(c.lang, src))),
+      },
       action: { type: 'none' },
     })),
     {
@@ -931,7 +940,7 @@ const activeCount = (s: Session) =>
   s.buffs.length + (s.enhancement ? 1 : 0) + (s.held ? 1 : 0) + (s.castDefensively ? 1 : 0) + (s.stance ? 1 : 0) + (s.charging ? 1 : 0) + (s.readied ? 1 : 0) + s.external.length
 
 // Iniciar combate (fila de contexto del menú principal) / Terminar combate (al final de la pestaña de pelea). El turno se
-// avanza con NUEVO TURNO ▸ en el HUD.
+// avanza con el botón ▸▸ del HUD.
 function combatItem(c: MenuCtx): MenuItem {
   const { sheet, session, t: tr } = c
   if (session.combat) {

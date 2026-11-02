@@ -3,50 +3,69 @@ import { ABILITIES, BIO_FIELDS } from '../../core/schema'
 import { useT } from '../../i18n/useT'
 import { alignmentLabel, formatInt, formatValue, statParts } from './labels'
 import { localName, localSource } from '../../data/names'
+import { Block, OpenParts, type PanelStat } from './StatLine'
 
-// Cabecera de la página 1: nombre, clase y nivel, la XP ganada y los atributos (con desglose si no es solo la base).
+// Cabecera de la página 1: nombre a la izquierda, clase, nivel y XP ganada a la derecha, y los atributos en 6
+// columnas. Un atributo con desglose (no solo la base) se toca y el desglose aparece debajo.
 // La descripción (raza, alineamiento, datos personales, XP para el próximo nivel) va en la página 2.
-export function SheetHeader({ sheet }: { sheet: ComputedSheet }) {
+export function SheetHeader({ sheet, open, onToggle }: { sheet: ComputedSheet; open: string | null; onToggle: (id: string) => void }) {
   const { t, lang } = useT()
   const classes = sheet.classes.map((c) => `${localName(lang, c.id, c.name)} ${c.level}`).join(' / ')
-  const abilityParts = ABILITIES.map((a) => ({ a, parts: statParts(t, sheet.abilities[a].score, false, (s) => localSource(lang, s)) })).filter((x) => x.parts)
+  const items: PanelStat[] = ABILITIES.map((a) => ({ testId: `sheet-ability-${a}`, label: t(`ability.${a}`), stat: sheet.abilities[a].score, signed: false }))
 
   return (
-    <header className="sheet-header card">
-      <h1 data-testid="sheet-name">{sheet.name}</h1>
-      <p className="muted">
-        <span data-testid="sheet-level">{classes}</span> · {t('sheet.xp')}{' '}
-        <span className="header-xp" data-testid="sheet-xp">
-          {formatInt(sheet.xp.current, lang)}
-        </span>
-      </p>
+    <Block>
+      {/* El encabezado es lo memorable de la ficha: el nombre en letra de inscripción, el rayo debajo y un
+          resplandor de tormenta detrás (sheet.css). Clase y XP a la derecha, en dos renglones. */}
+      <header className="sheet-head">
+        <div className="sheet-head-name">
+          <h1 data-testid="sheet-name">{sheet.name}</h1>
+          <span className="sheet-bolt" aria-hidden />
+        </div>
+        <p className="sheet-head-meta">
+          <span data-testid="sheet-level">{classes}</span>
+          <span>
+            {t('sheet.xp')}{' '}
+            <span className="header-xp" data-testid="sheet-xp">
+              {formatInt(sheet.xp.current, lang)}
+            </span>
+          </span>
+        </p>
+      </header>
       <div className="abilities">
         {ABILITIES.map((a) => {
           const { score, mod } = sheet.abilities[a]
-          return (
-            <div key={a} className="ability">
+          const tappable = Boolean(statParts(t, score, false, (s) => localSource(lang, s)))
+          const id = `sheet-ability-${a}`
+          const inner = (
+            <>
               <span className="stat-label">{t(`ability.${a}`)}</span>
-              <span className="ability-score" data-testid={`sheet-ability-${a}`}>
+              <span className="ability-score" data-testid={id}>
                 {score.total}
               </span>
-              <span className="ability-mod" data-testid={`sheet-ability-${a}-mod`}>
+              <span className="ability-mod" data-testid={`${id}-mod`}>
                 {formatValue(mod, true)}
               </span>
+            </>
+          )
+          return tappable ? (
+            <button key={a} type="button" className="ability tap-stat" aria-expanded={open === id} onClick={() => onToggle(id)}>
+              {inner}
+            </button>
+          ) : (
+            <div key={a} className="ability">
+              {inner}
             </div>
           )
         })}
       </div>
-      {abilityParts.map(({ a, parts }) => (
-        <p key={a} className="stat-parts ability-parts">
-          {t(`ability.${a}`)} {sheet.abilities[a].score.total} <span aria-hidden>= </span>
-          <span data-testid={`sheet-ability-${a}-parts`}>{parts}</span>
-        </p>
-      ))}
-    </header>
+      <OpenParts items={items} open={open} />
+    </Block>
   )
 }
 
-// Descripción (página 2): raza, alineamiento y tamaño; los datos personales que haya; y la XP con el próximo nivel.
+// Descripción (página 2, dentro de su plegable): raza, alineamiento y tamaño; los datos personales que haya; y la XP
+// con el próximo nivel.
 export function Description({ sheet }: { sheet: ComputedSheet }) {
   const { t, lang } = useT()
   const { current, next } = sheet.xp
@@ -58,8 +77,7 @@ export function Description({ sheet }: { sheet: ComputedSheet }) {
   }).join(' · ')
 
   return (
-    <section className="card">
-      <h2 className="card-title">{t('sheet.section.description')}</h2>
+    <>
       <p className="line" data-testid="sheet-summary">
         {[localSource(lang, sheet.race), sheet.alignment && alignmentLabel(t, sheet.alignment), t(`size.${sheet.size}`)].filter(Boolean).join(' · ')}
       </p>
@@ -75,6 +93,6 @@ export function Description({ sheet }: { sheet: ComputedSheet }) {
           {next !== null && ` / ${formatInt(next, lang)}`}
         </span>
       </p>
-    </section>
+    </>
   )
 }

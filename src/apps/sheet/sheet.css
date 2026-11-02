@@ -1,8 +1,37 @@
-/* Ficha (#/sheet). Solo lectura. Usa los tokens de src/index.css. Sin animaciones hasta effects-config.json. */
+/* Ficha (#/sheet). Solo lectura. Sin animaciones hasta effects-config.json.
+   Estilo propio, "Tormenta arcana": una página de grimorio en noche de tormenta. Los colores se redefinen solo
+   dentro de .sheet (el menú jugable sigue con los de src/index.css):
+     Nubarrón (fondo) · Nube (la página) · Hilo (líneas) · Bruma (rótulos) · Pergamino (texto)
+     Relámpago (el rayo, los modificadores, lo abierto) · Arcano (lo mágico) · Sangre (los PG).
+   Tipografía: Marcellus (nombre y títulos) + Barlow Semi Condensed (texto y números), escala fija de 1.25. */
 
 .sheet {
+  --bg: #19202e;
+  --surface: #212a3d;
+  --border: #33405a;
+  --text-muted: #93a0b8;
+  --text: #ece5d3;
+  --accent: #f2c94c;
+  --arcane: #a58dff;
+  --blood: #e5484d;
+  --font-title: 'Marcellus', Georgia, serif;
+  --font-body: 'Barlow Semi Condensed', system-ui, sans-serif;
+  --fs-1: 0.8rem;
+  --fs-2: 1rem;
+  --fs-3: 1.25rem;
+  --fs-4: 1.6rem;
+  --fs-5: 2.4rem;
+
   max-width: 560px;
   margin: 0 auto;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-2);
+}
+
+/* El fondo de toda la página mientras se ve la ficha: nubarrón con el resplandor de tormenta arriba */
+body:has(.sheet) {
+  background: radial-gradient(ellipse 90% 340px at 50% 0, #2b3654, #19202e 70%) no-repeat, #19202e;
 }
 
 .muted {
@@ -55,25 +84,215 @@
   border-bottom-color: var(--accent);
 }
 
-/* --- Cabecera --- */
-.sheet-header h1 {
-  margin: 4px 0 0;
-  font-size: 1.5rem;
+/* --- Panel: una sola página, los bloques separados por una línea fina (sin cajitas ni sombras) --- */
+.panel {
+  margin-bottom: 16px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
-.sheet-header p {
-  margin: 2px 0;
+.panel-block {
+  padding: 16px 0;
+}
+
+.panel-block + .panel-block {
+  border-top: 1px solid var(--border);
+}
+
+/* Título de bloque: letra de inscripción, en minúscula normal; a la derecha, los datos del arma */
+.block-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 8px;
+  font-family: var(--font-title);
+  font-size: var(--fs-3);
+  font-weight: 400;
+}
+
+.block-title.is-arcane {
+  color: var(--arcane);
+}
+
+.block-meta {
+  display: flex;
+  gap: 16px;
+  font-family: var(--font-body);
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+
+/* Lo que se toca para ver el desglose: se ve como texto, no como botón */
+.tap-stat,
+.tap-row {
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.tap-stat[aria-expanded='true'] .stat-label,
+.tap-row[aria-expanded='true'] .attack-name {
+  color: var(--accent);
+}
+
+/* Tríos (PG · CA · Inic grandes; las salvaciones, chicas): ícono, número y rótulo, centrados */
+.big-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 4px 0;
+}
+
+.big-value {
+  font-size: var(--fs-5);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.big-stat .stat-label {
+  margin-top: 4px;
+}
+
+.big-stat.is-small .big-value {
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.sheet-icon {
+  font-size: var(--fs-2);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.sheet-icon.is-blood {
+  color: var(--blood);
+}
+
+.sheet-icon.is-bolt {
+  color: var(--accent);
+}
+
+/* Números chicos: toque y desprevenido, en línea y centrados */
+.mini-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 24px;
+}
+
+.mini-center {
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.mini-stat {
+  display: inline-flex;
+  align-items: baseline;
+  min-height: 36px;
+  padding: 0;
+}
+
+.mini-value {
+  margin-left: 8px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Combate y Magia: una grilla de 2 columnas; en cada celda, el rótulo a la izquierda y el número a la derecha */
+.sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 24px;
+}
+
+.sheet-grid .mini-stat {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.sheet-grid .mini-stat small {
+  margin-left: 4px;
+}
+
+.sheet-grid .mini-value {
+  margin-left: auto;
+}
+
+.panel-parts {
+  margin: 8px 0 0;
+}
+
+/* --- Encabezado: lo memorable. El nombre en letra de inscripción, el rayo debajo; clase y XP a la derecha --- */
+.sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.sheet-head-name {
+  min-width: 0;
+}
+
+.sheet-head h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: var(--fs-5);
+  font-weight: 400;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+/* El rayo: un zigzag de 2 px recortado con clip-path, del color del relámpago */
+.sheet-bolt {
+  display: block;
+  width: min(12rem, 100%);
+  height: 8px;
+  margin-top: 4px;
+  background: var(--accent);
+  clip-path: polygon(
+    0 70%, 8% 15%, 16% 70%, 24% 15%, 32% 70%, 40% 15%, 48% 70%, 56% 15%, 64% 70%, 72% 15%, 80% 70%, 88% 15%, 100% 55%,
+    100% 80%, 88% 40%, 80% 95%, 72% 40%, 64% 95%, 56% 40%, 48% 95%, 40% 40%, 32% 95%, 24% 40%, 16% 95%, 8% 40%, 0 95%
+  );
+}
+
+.sheet-head-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-1);
+  white-space: nowrap;
 }
 
 .header-xp {
   color: var(--text);
+  font-weight: 600;
 }
 
 .abilities {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 4px;
-  margin: 8px 0 4px;
+  margin: 16px 0 0;
 }
 
 .ability {
@@ -81,18 +300,17 @@
   flex-direction: column;
   align-items: center;
   padding: 4px 0;
-  border-radius: var(--radius);
-  background: var(--bg);
 }
 
 .ability-score {
-  font-size: 1.1rem;
+  font-size: var(--fs-3);
   font-weight: 600;
   line-height: 1.2;
 }
 
 .ability-mod {
-  font-size: 0.85rem;
+  font-size: var(--fs-1);
+  font-weight: 600;
   color: var(--accent);
 }
 
@@ -110,88 +328,84 @@
   padding-left: 18px;
 }
 
-/* --- Tarjetas --- */
-.card {
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background: var(--surface);
+/* --- Plegables de la página 2: la fila (título, resumen, ▾) y el cuerpo --- */
+.fold {
+  position: relative;
+  padding: 0;
 }
 
-.card-title {
-  margin: 4px 0 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
+/* Abierto: una rayita al costado, amarilla (o violeta si es lo mágico), afuera del margen del texto */
+.fold:has(> .fold-row[aria-expanded='true'])::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -16px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
 }
 
-.card-title span {
-  color: var(--text);
+.fold.is-arcane:has(> .fold-row[aria-expanded='true'])::before {
+  background: var(--arcane);
 }
 
-.card-title-split {
+.fold-row {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.card-title .card-title-meta {
-  color: var(--text-muted);
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-/* --- Línea de stat: ETIQUETA a la izquierda, total a la derecha; desglose y condicionales debajo --- */
-.stat-line {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
-  column-gap: 10px;
-  padding: 6px 0;
-}
-
-.stat-line .stat-parts,
-.stat-line .stat-cond {
-  grid-column: 1 / -1;
-  padding-left: 8px;
-}
-
-/* --- Cajitas (CA, toque, desprevenido; salvaciones), como las de los atributos --- */
-.stat-boxes {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0 0 6px;
-}
-
-.stat-box {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 4px;
-  border-radius: var(--radius);
-  background: var(--bg);
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fold-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-title);
+  font-size: var(--fs-3);
+}
+
+.fold-summary {
+  display: flex;
+  gap: 16px;
+  color: var(--text-muted);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fold-summary span {
+  color: inherit;
+}
+
+.fold-arrow {
+  flex: none;
+  width: 1.2em;
+  color: var(--text-muted);
+  font-size: 0.75rem;
   text-align: center;
 }
 
-.stat-box-value {
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1.2;
+.fold-row[aria-expanded='true'] .fold-title {
+  color: var(--accent);
 }
 
-.stat-box .stat-parts,
-.stat-box .stat-cond {
-  font-size: 0.75rem;
-  line-height: 1.3;
+.fold.is-arcane .fold-row[aria-expanded='true'] .fold-title {
+  color: var(--arcane);
+}
+
+.fold-body {
+  padding: 0 0 16px;
 }
 
 /* Números de ancho fijo: los dígitos quedan en columna */
-.stat-value,
-.stat-box-value,
 .ability-score,
 .ability-mod,
 .attack-bonus,
@@ -201,54 +415,45 @@
 }
 
 .stat-label {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  letter-spacing: 0.02em;
-}
-
-.stat-value {
-  font-size: 1.15rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.stat-value small {
-  font-size: 0.75rem;
-  font-weight: 400;
+  font-size: var(--fs-1);
   color: var(--text-muted);
 }
 
 .stat-parts {
-  font-size: 0.8rem;
+  font-size: var(--fs-1);
   color: var(--text-muted);
 }
 
+/* Lo situacional ("+9 lanzando a la defensiva"): siempre a la vista, en cursiva para separarlo del desglose */
 .stat-cond {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--accent);
+  margin: 8px 0 0;
+  font-size: var(--fs-1);
+  font-style: italic;
+  color: var(--text-muted);
 }
 
-.ability-parts {
-  margin: 2px 0;
-}
-
-/* --- Ataques --- */
+/* --- Ataques: una fila por variante (nombre | ataque | daño), los números en columnas fijas --- */
 .attack-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(4ch, auto) minmax(6ch, auto);
   align-items: baseline;
-  column-gap: 12px;
-  padding: 6px 0;
+  column-gap: 16px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 0;
+}
+
+.attack-bonus {
+  text-align: right;
+}
+
+.attack-damage {
+  text-align: right;
 }
 
 .attack-bonus,
 .attack-damage {
   font-weight: 600;
-}
-
-.attack-parts {
-  grid-column: 1 / -1;
 }
 
 /* --- Skills --- */
@@ -285,7 +490,7 @@
 }
 
 .skill-mark {
-  color: var(--accent);
+  color: var(--text-muted);
   font-size: 0.7rem;
 }
 
@@ -382,27 +587,91 @@
   margin: 4px 0 0;
 }
 
-/* --- Conjuros tocables: cada conjuro abre su tarjeta (la de #/play) --- */
-.spell-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* --- Conjuros: por nivel, una fila por conjuro (nombre | alcance | daño o salvación | ›); abre su tarjeta --- */
+.spell-level + .spell-level {
+  margin-top: 16px;
 }
 
-.spell-btn {
+/* Cabecera de nivel: el nivel en letra de inscripción (violeta), los usos por día y la CD */
+.spell-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-1);
+}
+
+button.spell-head {
+  width: 100%;
   min-height: var(--tap);
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  margin: 0;
+}
+
+button.spell-head > span:first-child {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.spell-level-name {
+  font-family: var(--font-title);
+  font-size: var(--fs-2);
+  color: var(--arcane);
+}
+
+.spell-dc {
+  color: var(--arcane);
+  font-weight: 600;
+}
+
+.plain-list li:has(> .spell-row) {
+  padding: 0;
+}
+
+.spell-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 4.5ch 1ch;
+  align-items: baseline;
+  column-gap: 12px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
   background: none;
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  margin: 4px 0;
+  align-content: center;
+}
+
+.spell-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spell-range,
+.spell-effect {
+  color: var(--text-muted);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
+.spell-effect {
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Las partes de un resumen, separadas por espacio (sin puntos medios) */
+.sheet-part {
+  white-space: nowrap;
 }
 
 .sheet-spell-overlay {

@@ -42,6 +42,34 @@ export function statParts(t: Translate, stat: Stat, isSigned: boolean, named?: (
 }
 export const SKILL_SEP = ' · '
 
+// El mismo desglose que statParts, en filas para la tarjeta de detalle, con los nombres largos:
+// { Base 10 } { Armadura +4, sub: Camisa de malla } { Destreza +1 }. Vacío en los mismos casos que statParts.
+export interface StatRow {
+  label: string
+  value: string
+  sub?: string
+}
+// Las abreviaturas internas van en minúscula ("base", "de clase"); en una fila, con mayúscula inicial
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+export function statRows(t: Translate, stat: Stat, isSigned: boolean, named?: (source: string) => string): StatRow[] {
+  const mods = stat.applied.filter((m) => m.value !== 0)
+  if (mods.length === 1 && mods[0]?.type === 'base') return []
+  return mods.map((m, i) => {
+    if (m.source === 'ranks') return { label: t('card.ranks'), value: String(m.value) }
+    const value = formatValue(m.value, !(!isSigned && i === 0 && m.value >= 0))
+    const internal = internalSource(t, m.source)
+    const name = internal === null ? (named ? named(m.source) : m.source) : undefined
+    const source = internal || name || ''
+    if (m.type === 'base' || m.type === 'ability') {
+      const label = isAbility(m.source) ? t(`abilityLong.${m.source}`) : m.source === 'base' ? t('card.base') : source
+      return { label: cap(label), value }
+    }
+    // Sin tipo: se nombra la fuente; con tipo: el tipo y, abajo, de dónde sale
+    if (m.type === 'untyped') return { label: cap(source) || t('bonusTypeLong.untyped'), value }
+    return { label: t(`bonusTypeLong.${m.type}`), value, ...(source ? { sub: cap(source) } : {}) }
+  })
+}
+
 // "(+9 lanzando a la defensiva o apresado)", una por condición.
 export function conditionalTexts(t: Translate, stat: Stat, isSigned: boolean): string[] {
   return stat.conditional.map((c) => `(${formatValue(c.total, isSigned)} ${conditionLabel(t, c.condition)})`)

@@ -129,16 +129,17 @@ a.hud-icon {
   color: var(--accent);
 }
 .hud-turn {
+  min-width: var(--tap);
   min-height: var(--tap);
   margin-right: 4px;
-  padding: 0 14px;
+  padding: 0 10px;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: none;
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 .gold {
   color: var(--gold);
@@ -160,22 +161,20 @@ a.hud-icon {
 }
 
 /* --- Detalle ---
-   3 franjas de alto fijo, así cada dato cae siempre a la misma altura y la lista no se mueve:
-   1 título + tag · 2 datos (columnas, o `line` en grande) · 3 descripción gris (2 renglones con salto).
-   Lo que no entra termina en "…" y aparece ⓘ: tocar el panel abre la tarjeta (DetailPanel.tsx). */
+   Franja de alto fijo entre la lista y los botones, así la lista no se mueve al pasar de una fila a otra:
+   1 título + ⓘ + tag · 2 y 3 el cuerpo (columnas en una línea + descripción, o `line` + descripción).
+   Lo urgente suma un renglón amarillo abajo solo cuando hay algo. Lo que no entra termina en "…" y aparece ⓘ:
+   tocar la franja abre la tarjeta (DetailPanel.tsx). */
 .detail {
   --d1-lh: 1.4rem;
-  --label-lh: 0.9rem;
-  --value-lh: 1.35rem;
-  --desc-lh: 1.25rem;
+  --row-lh: 1.3rem;
   display: block;
   width: 100%;
-  height: calc(20px + 1px + var(--d1-lh) + 10px + var(--label-lh) + var(--value-lh) + 2 * var(--desc-lh));
   flex: none;
   overflow: hidden;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: none;
   text-align: left;
   font-variant-numeric: tabular-nums;
@@ -206,88 +205,120 @@ a.hud-icon {
   font-size: 0.8rem;
   font-weight: 400;
 }
-/* 2 · datos: alto de las columnas, contenido arriba */
-.detail .d-data {
-  height: calc(10px + var(--label-lh) + var(--value-lh));
-  padding-top: 6px;
+/* 2 y 3 · cuerpo: siempre dos renglones de alto */
+.detail .d-body {
+  height: calc(2 * var(--row-lh));
+  overflow: hidden;
 }
+/* Las columnas en una línea, cada una de su ancho natural (Ataque +3   Daño 1d8+3   Crítico 19-20/×2) */
 .detail .d-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.detail .d-stats > div {
   display: flex;
-  flex-direction: column;
-  min-width: 0;
+  gap: 14px;
+  height: var(--row-lh);
+  line-height: var(--row-lh);
+}
+.detail .d-stat {
+  flex: 0 1 auto;
 }
 .detail .d-label {
   color: var(--text-muted);
-  font-size: 0.65rem;
-  line-height: var(--label-lh);
+  font-size: 0.7rem;
   letter-spacing: 0.02em;
 }
 .detail .d-value,
 .detail .d-line {
-  font-size: 1.05rem;
-  line-height: var(--value-lh);
+  font-size: 1rem;
   font-weight: 600;
 }
-/* 3 · descripción: siempre en los 2 últimos renglones, con salto de línea; se corta en el 2º */
+.detail .d-line,
 .detail .d-desc {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  height: calc(2 * var(--desc-lh));
-  overflow: hidden;
+  line-height: var(--row-lh);
+}
+.detail .d-desc {
   color: var(--text-muted);
   font-size: 0.85rem;
-  line-height: var(--desc-lh);
 }
-/* Aviso de PG bajos: primero en la descripción */
+.detail .clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.detail .rows-1 {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  max-height: var(--row-lh);
+}
+.detail .rows-2 {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: calc(2 * var(--row-lh));
+}
+/* Lo urgente (PG bajos, tumbado, carga en la mano): un renglón más, solo cuando hay algo */
 .d-warn {
   color: var(--warn);
 }
+.detail .d-warn {
+  font-size: 0.85rem;
+  line-height: var(--row-lh);
+}
 
 /* --- Lista con cursor --- */
+/* La fila de la pestaña (o la miga) queda fija arriba y la lista hace scroll debajo.
+   Deslizar sobre las dos: ← y → cambian de pestaña en la raíz, → vuelve en un submenú (PlayScreen.tsx). */
+.navwrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  touch-action: pan-y;
+}
 .listwrap {
   position: relative;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
 .crumb {
-  min-height: 22px; /* el renglón está siempre (vacío en la raíz), así la lista no salta */
-  padding: 6px 12px 2px;
-  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 0 4px 0 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
   letter-spacing: 0.02em;
   color: var(--text-muted);
 }
-
-/* --- Pestañas del menú principal (mismo estilo que el selector de páginas de la ficha) --- */
-.tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-bottom: 1px solid var(--border);
+.crumb-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-.tab {
+.crumb-tab {
+  color: var(--text);
+  font-weight: 600;
+}
+/* Los puntitos de las pestañas: se tocan, además de deslizar */
+.tab-dots {
+  display: flex;
+  flex: none;
+}
+.tab-dot {
+  min-width: 40px;
   min-height: var(--tap);
+  padding: 0;
   border: 0;
-  border-bottom: 3px solid transparent;
   background: none;
   color: var(--text-muted);
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
 }
-.tab[aria-selected='true'] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
+.tab-dot[aria-selected='true'] {
+  color: var(--accent);
 }
 .list {
   position: relative;
@@ -397,8 +428,10 @@ a.hud-icon {
   color: var(--accent);
 }
 
-/* --- Tarjeta del conjuro --- */
-.spell-card {
+/* --- Tarjetas (detalle y conjuro), a pantalla completa ---
+   Un marco con borde, como el del menú: dónde estás · título (+ número grande) · sub · filas · texto.
+   Abajo, ✕ VOLVER en el lugar de la barra de botones. */
+.pcard {
   position: absolute;
   inset: 0;
   z-index: 4;
@@ -406,45 +439,94 @@ a.hud-icon {
   flex-direction: column;
   background: var(--surface);
 }
-.spell-card-body {
+.pcard-body {
   flex: 1;
+  margin: 8px 8px 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
   user-select: text;
   -webkit-user-select: text;
 }
-.spell-card h2 {
-  margin: 0;
-  font-size: 1.1rem;
+.pcard-where {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
 }
-.spell-school {
-  margin: 4px 0 12px;
+.pcard-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.pcard h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+.pcard-big {
+  flex: none;
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pcard-sub {
+  margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 0.85rem;
 }
-.spell-card dl {
+/* Filas: rótulo a la izquierda y valor al lado; con .num el valor va a la derecha (números) */
+.pcard-rows {
   display: grid;
-  gap: 6px;
-  margin: 0 0 12px;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
-.spell-card dl div {
+.pcard-rows div {
   display: grid;
   grid-template-columns: 7.5rem 1fr;
   gap: 8px;
 }
-.spell-card dt {
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.pcard-rows.num div {
+  grid-template-columns: 1fr auto;
 }
-.spell-card dd {
+.pcard-rows dt {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.pcard-rows.num dt {
+  color: var(--text);
+}
+.pcard-rows dt small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.pcard-rows dd {
   margin: 0;
 }
-.spell-text {
+.pcard-rows.num dd {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pcard-text {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
   line-height: 1.5;
   white-space: pre-line; /* respeta los saltos de línea de las notas */
 }
-.spell-card-close {
+.pcard-text + .pcard-text {
+  padding-top: 0;
+  border-top: 0;
+}
+.pcard-close {
   min-height: var(--tap);
   margin: 8px;
   border: 1px solid var(--accent);

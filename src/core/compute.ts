@@ -3,6 +3,7 @@ import { makeStat, signed, type Modifier, type ModifierType, type Stat } from '.
 import { abilityMod } from './rules/pf1e/abilities'
 import { ARMOR_RANK, CMD_AC_TYPES, TOUCH_EXCLUDED, armoredSpeed, isMelee, strToDamage } from './rules/pf1e/combat'
 import { baseAttack, baseSave, featsByLevel, iterativeAttacks } from './rules/pf1e/progression'
+import { computeLoad, loadedSpeed, type Load } from './rules/pf1e/load'
 import { SIZE } from './rules/pf1e/size'
 import { SKILLS, SKILL_BY_ID, splitSkillKey, type SkillDef } from './rules/pf1e/skills'
 import { bonusSpells, spellDc } from './rules/pf1e/spells'
@@ -10,6 +11,7 @@ import { xpForNextLevel, type XpTrack } from './rules/pf1e/xp'
 import {
   ABILITIES,
   type Ability,
+  type Bio,
   type Character,
   type ModifierInput,
   type Size,
@@ -23,6 +25,7 @@ import {
 export interface SessionContext {
   modifiers?: readonly Modifier[] // buffs, condiciones, Arcane Pool sobre el arma…
   conditions?: readonly string[] // activa los modifiers con esa `condition` (ej. 'casting-defensively')
+  defensiveTrade?: number // ataque cambiado por concentración en las variantes que lo permiten (se recorta al tope)
 }
 
 export type IssueCode =
@@ -81,6 +84,8 @@ export interface SpellcastingLine {
   ability: Ability // atributo de lanzamiento
   casterLevel: Stat
   concentration: Stat
+  // Concentración dentro de una variante con ataque cambiado (ej. 'spell-combat' a la defensiva); solo si hay cambio
+  concentrationBy: Record<string, Stat>
   spellsPerDay: number[] // por nivel de conjuro, ya con los extra por atributo
   bonusSpells: number[]
   dcs: number[]
@@ -111,6 +116,7 @@ export interface ComputedSheet {
   race: string
   size: Size
   alignment: string
+  bio: Bio // datos personales (deidad, origen, edad…), tal cual el JSON; vacío si no hay
   level: number
   xp: { current: number; next: number | null; track: XpTrack } // next = null en nivel 20
   languages: { known: string[]; pending: number } // pending: los que le quedan por elegir (INT + Linguistics)
@@ -125,8 +131,11 @@ export interface ComputedSheet {
   cmb: Stat
   cmd: Stat
   speed: Stat
+  load: Load | null // peso que lleva y topes de carga, en kg (null si el JSON no anota ningún peso)
   attacks: AttackLine[]
   touch: Record<string, { melee: Stat; ranged: Stat }> // ataques de toque de conjuros, por variante ('standard', 'spell-combat')
+  // Cambio de ataque por concentración: tope, valor aplicado y las variantes que lo permiten (null si ninguna)
+  defensiveTrade: { max: number; value: number; variants: string[] } | null
   skills: SkillLine[]
   skillRanks: { available: number; spent: number }
   feats: { id: string; name: string; param?: string; known: boolean }[]
@@ -142,6 +151,8 @@ const FALLBACK_RACE: RaceDef = { id: 'unknown', name: 'Unknown', size: 'medium',
 
 const mod = (target: Target, type: ModifierType, value: number, source: string): Modifier => ({ target, type, value, source })
 const withSource = (m: ModifierInput, source: string): Modifier => ({ ...m, source })
+// Fuente del cambio de ataque por concentración (en el desglose; en ES la traduce src/data/names.ts)
+const TRADE_SOURCE = 'Attack for concentration'
 
 // `rules` (razas, clases, dotes, conjuros) siempre lo pasa quien llama: core/ no importa src/data/.
 export function computeSheet(character: Character, rules: RulesDb, session: SessionContext = {}): ComputedSheet {
@@ -249,12 +260,24 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
   const saves = { fort: save('fort', 'con'), ref: save('ref', 'dex'), will: save('will', 'wis') }
   const initiative = stat([mod('initiative', 'ability', am.dex, 'dex'), ...pick('initiative')])
 
+  // --- Carga (kg) ---
+  // Va antes de la CA: la carga media o pesada limita la DES, penaliza y frena, como la armadura (vale el peor).
+  const eq = character.equipment
+  const weights = [eq.armor?.weight, eq.shield?.weight, ...eq.weapons.map((w) => w.weight), ...eq.items.map((i) => (i.weight === undefined ? undefined : i.weight * i.quantity))]
+  const listed = weights.filter((w): w is number => w !== undefined)
+  const load = listed.length ? computeLoad(abilities.str.score.total, size, listed.reduce((a, b) => a + b, 0)) : null
+  const loadSource = load && load.category !== 'light' ? `load-${load.category}` : null
+
   // --- CA ---
   const { armor, shield } = character.equipment
   const acpOf = (g?: { armorCheckPenalty: number; masterwork: boolean }) =>
     g ? Math.min(0, g.armorCheckPenalty + (g.masterwork ? 1 : 0)) : 0
-  const armorCheckPenalty = acpOf(armor) + acpOf(shield)
-  const maxDex = Math.min(armor?.maxDex ?? Infinity, shield?.maxDex ?? Infinity)
+  const gearAcp = acpOf(armor) + acpOf(shield)
+  const loadAcp = load?.acp ?? 0
+  const armorCheckPenalty = Math.min(gearAcp, loadAcp)
+  // En el desglose de las habilidades, la fuente es la que manda (armadura o carga)
+  const acpSource = loadAcp < gearAcp && loadSource ? loadSource : 'armor-check-penalty'
+  const maxDex = Math.min(armor?.maxDex ?? Infinity, shield?.maxDex ?? Infinity, load?.maxDex ?? Infinity)
   const acMods: Modifier[] = [
     mod('ac', 'base', 10, 'base'),
     ...(armor ? [mod('ac', 'armor', armor.armorBonus + armor.enhancement, armor.name)] : []),
@@ -284,9 +307,25 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
   ])
 
   // --- Velocidad ---
+  // Armadura media o pesada y carga media o pesada frenan igual: se aplica una sola vez, la peor, con su fuente.
   const speedMods = [mod('speed', 'base', race.speed, 'base')]
-  if (armor && armor.category !== 'light') speedMods.push(mod('speed', 'base', armoredSpeed(race.speed) - race.speed, armor.name))
+  const armorSlow = armor && armor.category !== 'light' ? armoredSpeed(race.speed) - race.speed : 0
+  const loadSlow = load ? loadedSpeed(race.speed, load.category) - race.speed : 0
+  if (loadSlow < armorSlow && loadSource) speedMods.push(mod('speed', 'base', loadSlow, loadSource))
+  else if (armorSlow && armor) speedMods.push(mod('speed', 'base', armorSlow, armor.name))
   const speed = stat([...speedMods, ...pick('speed')])
+
+  // --- Cambio de ataque por concentración (Spell Combat a la defensiva) ---
+  // Tope: el mod. del atributo de lanzamiento de la clase que tiene la variante. Lo que pide la sesión se recorta.
+  const tradeVariants = classes.flatMap(({ def, level }) =>
+    (def.attackVariants ?? []).filter((v) => v.defensiveTrade && level >= v.minLevel).map((v) => ({ id: v.id, ability: def.spellcasting?.ability })),
+  )
+  const tradeMax = Math.max(0, ...tradeVariants.map((v) => (v.ability ? am[v.ability] : 0)))
+  const trade = Math.max(0, Math.min(session.defensiveTrade ?? 0, tradeMax))
+  const tradeFor = (variantId: string, target: 'attack' | 'concentration'): Modifier[] =>
+    trade && tradeVariants.some((v) => v.id === variantId)
+      ? [target === 'attack' ? mod('attack', 'untyped', -trade, TRADE_SOURCE) : mod('concentration', 'circumstance', trade, TRADE_SOURCE)]
+      : []
 
   // --- Ataques ---
   const attacks = character.equipment.weapons.map((w): AttackLine => {
@@ -313,7 +352,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     const variants = [variant('standard', 'Standard', [])]
     for (const c of classes) {
       for (const v of c.def.attackVariants ?? []) {
-        if (c.level >= v.minLevel && v.appliesTo(w)) variants.push(variant(v.id, v.name, v.modifiers.map((m) => withSource(m, v.name))))
+        if (c.level >= v.minLevel && v.appliesTo(w)) variants.push(variant(v.id, v.name, [...v.modifiers.map((m) => withSource(m, v.name)), ...tradeFor(v.id, 'attack')]))
       }
     }
     return { id: w.id, name: w.name, category: w.category, critical: w.critical, damageType: w.damageType, range: w.range, variants }
@@ -330,7 +369,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
   const touch: ComputedSheet['touch'] = { standard: touchLine([]) }
   for (const c of classes) {
     for (const v of c.def.attackVariants ?? []) {
-      if (c.level >= v.minLevel) touch[v.id] = touchLine(v.modifiers.map((m) => withSource(m, v.name)))
+      if (c.level >= v.minLevel) touch[v.id] = touchLine([...v.modifiers.map((m) => withSource(m, v.name)), ...tradeFor(v.id, 'attack')])
     }
   }
 
@@ -350,7 +389,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     const mods = [mod(target, 'ability', am[def.ability], def.ability)]
     if (r > 0) mods.push(mod(target, 'base', r, 'ranks'))
     if (r > 0 && classSkill) mods.push(mod(target, 'base', 3, 'class-skill')) // +3 solo con ≥1 rango
-    if (def.acp && armorCheckPenalty) mods.push(mod(target, 'base', armorCheckPenalty, 'armor-check-penalty'))
+    if (def.acp && armorCheckPenalty) mods.push(mod(target, 'base', armorCheckPenalty, acpSource))
     const sizeBonus = def.id === 'stealth' ? sz.stealth : def.id === 'fly' ? sz.fly : 0
     if (sizeBonus) mods.push(mod(target, 'size', sizeBonus, 'size'))
     return {
@@ -393,11 +432,18 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     if (!sc) return []
     const castMod = am[sc.ability]
     const casterLevel = stat([mod('caster-level', 'base', level, 'class-level'), ...pick('caster-level')])
-    const concentration = stat([
+    const concMods = [
       mod('concentration', 'base', casterLevel.total, 'caster-level'),
       mod('concentration', 'ability', castMod, sc.ability),
       ...pick('concentration'),
-    ])
+    ]
+    const concentration = stat(concMods)
+    const concentrationBy: Record<string, Stat> = Object.fromEntries(
+      (def.attackVariants ?? []).flatMap((v): [string, Stat][] => {
+        const extra = tradeFor(v.id, 'concentration')
+        return extra.length ? [[v.id, stat([...concMods, ...extra])]] : []
+      }),
+    )
     const row = sc.spellsPerDay[level - 1] ?? []
     const allowed = sc.armorWithoutFailure?.(level) ?? null
     const armorAsf = armor && !(allowed && ARMOR_RANK[armor.category] <= ARMOR_RANK[allowed]) ? armor.arcaneSpellFailure : 0
@@ -406,6 +452,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
       ability: sc.ability,
       casterLevel,
       concentration,
+      concentrationBy,
       spellsPerDay: row.map((n, s) => n + bonusSpells(castMod, s)),
       bonusSpells: row.map((_, s) => bonusSpells(castMod, s)),
       dcs: row.map((_, s) => spellDc(s, castMod)),
@@ -457,6 +504,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     race: race.name,
     size,
     alignment: character.alignment,
+    bio: character.bio ?? {},
     level: charLevel,
     xp,
     languages,
@@ -471,8 +519,10 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     cmb,
     cmd,
     speed,
+    load,
     attacks,
     touch,
+    defensiveTrade: tradeVariants.length && tradeMax ? { max: tradeMax, value: trade, variants: tradeVariants.map((v) => v.id) } : null,
     skills,
     skillRanks,
     feats,

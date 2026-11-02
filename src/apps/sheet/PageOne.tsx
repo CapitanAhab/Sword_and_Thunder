@@ -1,42 +1,55 @@
 import { useState } from 'react'
 import type { AttackLine, ComputedSheet, SkillLine } from '../../core/compute'
 import { useT } from '../../i18n/useT'
-import { damageTypeLabel, formatValue, prettyCrit, SKILL_SEP, statParts } from './labels'
+import { conditionalTexts, damageTypeLabel, formatValue, prettyCrit, SKILL_SEP, statParts } from './labels'
 import { localName, localSource } from '../../data/names'
 import { SheetHeader } from './SheetHeader'
-import { PlainLine, StatLine } from './StatLine'
+import { PlainLine, StatBox, StatLine } from './StatLine'
 
 // Página 1 de la oficial: cabecera, defensas, ataques, skills e idiomas.
 export function PageOne({ sheet }: { sheet: ComputedSheet }) {
   const { t, lang } = useT()
   const { ac, saves, languages } = sheet
+  const acParts = statParts(t, ac.normal, false, (s) => localSource(lang, s))
 
   return (
     <>
       <SheetHeader sheet={sheet} />
       <section className="card">
+        <h2 className="card-title">{t('sheet.section.hpInit')}</h2>
         <StatLine label={t('sheet.hp')} stat={sheet.hp} signed={false} testId="sheet-hp" />
         <StatLine label={t('sheet.init')} stat={sheet.initiative} testId="sheet-init" />
       </section>
       <section className="card">
-        <StatLine label={t('sheet.ac')} stat={ac.normal} signed={false} testId="sheet-ac" />
-        <div className="stat-pair">
-          <span>
-            <span className="stat-label">{t('sheet.touch')}</span>{' '}
-            <strong data-testid="sheet-ac-touch">{ac.touch.total}</strong>
-          </span>
-          <span>
-            <span className="stat-label">{t('sheet.flatFooted')}</span>{' '}
-            <strong data-testid="sheet-ac-flat">{ac.flatFooted.total}</strong>
-          </span>
+        <h2 className="card-title">{t('sheet.section.defense')}</h2>
+        <div className="stat-boxes">
+          <StatBox label={t('sheet.ac')} stat={ac.normal} signed={false} testId="sheet-ac" />
+          <StatBox label={t('sheet.touch')} stat={ac.touch} signed={false} testId="sheet-ac-touch" />
+          <StatBox label={t('sheet.flatFooted')} stat={ac.flatFooted} signed={false} testId="sheet-ac-flat" />
+        </div>
+        {/* El desglose de la CA es largo: va debajo de las cajitas */}
+        {acParts && (
+          <p className="stat-parts">
+            {t('sheet.ac')} <span aria-hidden>= </span>
+            <span data-testid="sheet-ac-parts">{acParts}</span>
+          </p>
+        )}
+        {conditionalTexts(t, ac.normal, false).map((c) => (
+          <p key={c} className="stat-cond" data-testid="sheet-ac-conditional">
+            {c}
+          </p>
+        ))}
+      </section>
+      <section className="card">
+        <h2 className="card-title">{t('sheet.section.saves')}</h2>
+        <div className="stat-boxes">
+          <StatBox label={t('sheet.fort')} stat={saves.fort} testId="sheet-save-fort" withParts />
+          <StatBox label={t('sheet.ref')} stat={saves.ref} testId="sheet-save-ref" withParts />
+          <StatBox label={t('sheet.will')} stat={saves.will} testId="sheet-save-will" withParts />
         </div>
       </section>
       <section className="card">
-        <StatLine label={t('sheet.fort')} stat={saves.fort} testId="sheet-save-fort" />
-        <StatLine label={t('sheet.ref')} stat={saves.ref} testId="sheet-save-ref" />
-        <StatLine label={t('sheet.will')} stat={saves.will} testId="sheet-save-will" />
-      </section>
-      <section className="card">
+        <h2 className="card-title">{t('sheet.section.combat')}</h2>
         <PlainLine label={t('sheet.bab')} value={formatValue(sheet.bab, true)} testId="sheet-bab" />
         <StatLine label={t('sheet.cmb')} stat={sheet.cmb} testId="sheet-cmb" />
         <StatLine label={t('sheet.cmd')} stat={sheet.cmd} signed={false} testId="sheet-cmd" />

@@ -86,3 +86,8 @@ export const formatValue = (n: number, isSigned: boolean) => minus(isSigned ? si
 
 // Miles a mano (Intl en 'es' no separa los de 4 cifras): 3000 → "3.000" / "3,000"
 export const formatInt = (n: number, lang: Lang) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, lang === 'es' ? '.' : ',')
+// Peso en kg: hasta 2 decimales, sin ceros de más (24,75 · 12,5 · 2); coma decimal en ES.
+export const formatKg = (n: number, lang: Lang) => {
+  const s = String(Math.round(n * 100) / 100)
+  return lang === 'es' ? s.replace('.', ',') : s
+}

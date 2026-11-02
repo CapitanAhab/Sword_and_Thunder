@@ -310,10 +310,26 @@ a.hud-icon {
   color: var(--text-muted);
   opacity: 0.55;
 }
+/* Solo para leer (sin acción): tono apagado, sin opacidad (no está bloqueada) */
+.row.info .row-label {
+  color: var(--text-muted);
+}
 .row-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Badge + › de submenú, juntos a la derecha */
+.row-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+.go {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1;
 }
 .badge {
   flex: none;
@@ -401,6 +417,7 @@ a.hud-icon {
 }
 .spell-text {
   line-height: 1.5;
+  white-space: pre-line; /* respeta los saltos de línea de las notas */
 }
 .spell-card-close {
   min-height: var(--tap);
@@ -411,6 +428,49 @@ a.hud-icon {
   color: var(--accent) !important;
   font-weight: 600;
   letter-spacing: 0.08em;
+}
+
+/* --- Pantalla de turno (MI TURNO): tapa todo hasta que la tocás --- */
+.turn-card {
+  justify-content: space-between;
+  gap: 16px;
+  padding: 32px 16px 8px;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.turn-card-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12vh;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.turn-card-head b {
+  font-size: 1.4rem;
+}
+.turn-card-head span {
+  color: var(--accent);
+}
+.turn-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turn-card-body .spell-text {
+  margin: 0;
+}
+.turn-card-muted {
+  color: var(--text-muted);
+}
+.turn-card-continue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
 }
 
 /* --- Tocá para empezar --- */
@@ -459,4 +519,34 @@ a.hud-icon {
 }
 .hold > * {
   position: relative;
+}
+
+/* --- JSON del personaje roto: aviso y salida a la ficha (donde se ven los errores) --- */
+.play-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.play-error-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+/* Aviso en "Tocá para empezar" cuando la sesión guardada se ajustó al personaje (solo esa vez) */
+.start-screen .start-notice {
+  max-width: 32ch;
+  margin-top: 12px;
+  color: var(--warn);
+  line-height: 1.4;
+  text-align: center;
 }

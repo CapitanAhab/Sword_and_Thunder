@@ -45,6 +45,11 @@
   text-transform: uppercase;
 }
 
+/* Con el JSON roto no hay páginas para ver */
+.page-btn:disabled {
+  opacity: 0.4;
+}
+
 .page-btn[aria-current='page'] {
   color: var(--text);
   border-bottom-color: var(--accent);
@@ -138,13 +143,61 @@
   letter-spacing: 0;
 }
 
-/* --- Línea de stat: ETIQUETA  total  = desglose --- */
+/* --- Línea de stat: ETIQUETA a la izquierda, total a la derecha; desglose y condicionales debajo --- */
 .stat-line {
   display: grid;
-  grid-template-columns: 7.5rem auto 1fr;
+  grid-template-columns: 1fr auto;
   align-items: baseline;
   column-gap: 10px;
   padding: 6px 0;
+}
+
+.stat-line .stat-parts,
+.stat-line .stat-cond {
+  grid-column: 1 / -1;
+  padding-left: 8px;
+}
+
+/* --- Cajitas (CA, toque, desprevenido; salvaciones), como las de los atributos --- */
+.stat-boxes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  text-align: center;
+}
+
+.stat-box-value {
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.stat-box .stat-parts,
+.stat-box .stat-cond {
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+/* Números de ancho fijo: los dígitos quedan en columna */
+.stat-value,
+.stat-box-value,
+.ability-score,
+.ability-mod,
+.attack-bonus,
+.attack-damage,
+.skill-total {
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
@@ -171,15 +224,9 @@
 }
 
 .stat-cond {
-  grid-column: 2 / -1;
+  margin: 0;
   font-size: 0.8rem;
   color: var(--accent);
-}
-
-.stat-pair {
-  display: flex;
-  gap: 24px;
-  padding: 6px 0;
 }
 
 .ability-parts {
@@ -291,6 +338,11 @@
   font-weight: 600;
 }
 
+/* Notas del personaje: respetan los saltos de línea del JSON */
+.sheet-notes {
+  white-space: pre-line;
+}
+
 .plain-list li {
   padding: 6px 0;
 }
@@ -298,6 +350,20 @@
 .item-note {
   display: block;
   padding-left: 12px;
+}
+
+/* Equipo con pesos: el objeto a la izquierda y su peso (kg) a la derecha */
+.plain-list .gear-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.gear-weight {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .sheet-footer {

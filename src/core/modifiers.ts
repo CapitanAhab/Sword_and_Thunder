@@ -25,12 +25,13 @@ export interface Stat {
   conditional: ConditionalTotal[]
 }
 
-const ALWAYS_STACK = new Set<ModifierType>(['base', 'ability', 'untyped', 'dodge'])
+const ALWAYS_STACK = new Set<ModifierType>(['base', 'ability'])
+const STACK_BY_SOURCE = new Set<ModifierType>(['circumstance', 'dodge', 'untyped'])
 
-// Stacking de PF1e: del mismo tipo gana el mayor, salvo dodge/untyped (y los internos).
-// Circumstance se acumula si viene de distinta fuente. Las penalizaciones siempre se acumulan.
+// Stacking de PF1e: del mismo tipo gana el mayor. Circumstance, dodge y untyped se acumulan si vienen de distinta
+// fuente (de la misma, gana el mayor). Los internos y las penalizaciones siempre se acumulan.
 export function stack(mods: readonly Modifier[]): { total: number; applied: Modifier[]; ignored: Modifier[] } {
-  const stackKey = (m: Modifier) => (m.type === 'circumstance' ? `circumstance:${m.source}` : m.type)
+  const stackKey = (m: Modifier) => (STACK_BY_SOURCE.has(m.type) ? `${m.type}:${m.source}` : m.type)
   const winners = new Map<string, Modifier>()
   for (const m of mods) {
     if (m.value < 0 || ALWAYS_STACK.has(m.type)) continue

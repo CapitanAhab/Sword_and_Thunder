@@ -43,7 +43,7 @@ function Row({ item, selected, onTap, onHold }: { item: MenuItem; selected: bool
   return (
     <button
       type="button"
-      className={`row${selected ? ' sel' : ''}${item.hold ? ' hold' : ''}${holding ? ' holding' : ''}${item.blocked ? ' blocked' : ''}`}
+      className={`row${selected ? ' sel' : ''}${item.hold ? ' hold' : ''}${holding ? ' holding' : ''}${item.blocked ? ' blocked' : ''}${item.nav === 'info' ? ' info' : ''}`}
       style={{ '--hold-ms': `${HOLD_MS}ms` } as CSSProperties}
       onClick={onTap}
       {...(item.hold ? handlers : {})}
@@ -52,7 +52,16 @@ function Row({ item, selected, onTap, onHold }: { item: MenuItem; selected: bool
       data-testid={`menu-item-${item.id}`}
     >
       <span className="row-label">{item.label}</span>
-      {item.badge && <span className={`badge fx-target${item.badge.tone ? ` ${item.badge.tone}` : ''}`}>{item.badge.text}</span>}
+      {(item.badge || item.nav === 'submenu') && (
+        <span className="row-end">
+          {item.badge && <span className={`badge fx-target${item.badge.tone ? ` ${item.badge.tone}` : ''}`}>{item.badge.text}</span>}
+          {item.nav === 'submenu' && (
+            <span className="go" aria-hidden="true">
+              ›
+            </span>
+          )}
+        </span>
+      )}
     </button>
   )
 }

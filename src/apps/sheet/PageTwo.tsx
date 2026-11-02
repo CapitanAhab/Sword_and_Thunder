@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { ComputedSheet, FeatureLine, SpellcastingLine } from '../../core/compute'
 import type { Character } from '../../core/schema'
 import { emptySession } from '../../core/session'
 import { useT, type Lang } from '../../i18n/useT'
-import { damageTypeLabel, formatValue, minus, prettyCrit, resourceDetailLabel, slotLabel } from './labels'
+import { damageTypeLabel, formatKg, formatValue, minus, prettyCrit, resourceDetailLabel, slotLabel } from './labels'
 import { PlainLine, StatLine } from './StatLine'
 import { localName, localNote, localSource, localSpell, localSummary } from '../../data/names'
 import { SpellCard } from '../play/SpellCard'
@@ -32,6 +32,25 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
       .filter(Boolean)
       .join(' · ')
 
+  const weaponLine = (w: (typeof weapons)[number]) => (
+    <>
+      {localName(lang, w.id, w.name)}
+      {w.enhancement ? ` +${w.enhancement}` : ''}  {w.damage} {prettyCrit(w.critical)}
+      {w.damageType && ` ${damageTypeLabel(t, w.damageType)}`}
+    </>
+  )
+  const itemLine = (i: (typeof items)[number]) => (
+    <>
+      {localName(lang, i.id, i.name)}
+      {qty(i.quantity)}
+      {i.slot && ` (${slotLabel(t, i.slot)})`}
+      {i.notes && <small className="muted item-note">{localNote(lang, i.id, i.notes)}</small>}
+    </>
+  )
+  // Carga: lo que lleva sobre el tope de la carga en la que está (ligera → tope de ligera; excedida → tope de pesada)
+  const load = sheet.load
+  const loadCap = load ? (load.category === 'light' ? load.light : load.category === 'medium' ? load.medium : load.heavy) : 0
+
   // La tarjeta del conjuro es la de #/play; en la ficha no hay sesión (solo lectura, sin efectos).
   const cardCtx: MenuCtx = { t, lang, sheet, session: emptySession(), character, draft: {}, showAllSkills: false }
 
@@ -58,25 +77,59 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
       )}
 
       <section className="card">
-        <h2 className="card-title">{t('sheet.equipment')}</h2>
-        <ul className="plain-list">
-          {weapons.map((w) => (
-            <li key={w.id}>
-              {localName(lang, w.id, w.name)}
-              {w.enhancement ? ` +${w.enhancement}` : ''}  {w.damage} {prettyCrit(w.critical)}
-              {w.damageType && ` ${damageTypeLabel(t, w.damageType)}`}
-            </li>
-          ))}
-          {detailed.map((i) => (
-            <li key={i.id}>
-              {localName(lang, i.id, i.name)}
-              {qty(i.quantity)}
-              {i.slot && ` (${slotLabel(t, i.slot)})`}
-              {i.notes && <small className="muted item-note">{localNote(lang, i.id, i.notes)}</small>}
-            </li>
-          ))}
-        </ul>
-        {plain.length > 0 && <p className="line">{plain.map((i) => localName(lang, i.id, i.name) + qty(i.quantity)).join(' · ')}</p>}
+        <h2 className="card-title card-title-split">
+          {t('sheet.equipment')}
+          {load && (
+            <span data-testid="sheet-load">
+              {t('sheet.load')} {formatKg(load.carried, lang)}/{formatKg(loadCap, lang)} {t('sheet.kg')} · {t(`load.${load.category}`)}
+            </span>
+          )}
+        </h2>
+        {load && load.category !== 'light' && (
+          // Lo que impone la carga (con armadura vale el peor de los dos; la velocidad, en la página 1)
+          <p className="muted line" data-testid="sheet-load-effects">
+            {[load.maxDex !== null && `${t('sheet.maxDex')} +${load.maxDex}`, load.acp && `${t('sheet.acp')} ${minus(String(load.acp))}`].filter(Boolean).join(' · ')}
+          </p>
+        )}
+        {load ? (
+          // Con pesos: un objeto por fila y su peso a la derecha (kg; los que no tienen peso, "—")
+          <ul className="plain-list">
+            {weapons.map((w) => (
+              <GearRow key={w.id} id={w.id} weight={w.weight} lang={lang}>
+                {weaponLine(w)}
+              </GearRow>
+            ))}
+            {armor && (
+              <GearRow id="armor" weight={armor.weight} lang={lang}>
+                {localSource(lang, armor.name)}
+                {armor.enhancement ? ` +${armor.enhancement}` : ''}
+              </GearRow>
+            )}
+            {shield && (
+              <GearRow id="shield" weight={shield.weight} lang={lang}>
+                {localSource(lang, shield.name)}
+                {shield.enhancement ? ` +${shield.enhancement}` : ''}
+              </GearRow>
+            )}
+            {items.map((i) => (
+              <GearRow key={i.id} id={i.id} weight={i.weight === undefined ? undefined : i.weight * i.quantity} lang={lang}>
+                {itemLine(i)}
+              </GearRow>
+            ))}
+          </ul>
+        ) : (
+          <>
+            <ul className="plain-list">
+              {weapons.map((w) => (
+                <li key={w.id}>{weaponLine(w)}</li>
+              ))}
+              {detailed.map((i) => (
+                <li key={i.id}>{itemLine(i)}</li>
+              ))}
+            </ul>
+            {plain.length > 0 && <p className="line">{plain.map((i) => localName(lang, i.id, i.name) + qty(i.quantity)).join(' · ')}</p>}
+          </>
+        )}
       </section>
 
       <section className="card">
@@ -97,7 +150,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
               <li key={f.id + (f.param ?? '')}>
                 <span data-testid={`sheet-feat-${f.id}`}>
                   {localName(lang, f.id, f.name)}
-                  {f.param && ` (${f.param})`}
+                  {f.param && ` (${localSource(lang, f.param)})`}
                 </span>
                 {summary && (
                   <small className="muted item-note" data-testid={`sheet-feat-${f.id}-summary`}>
@@ -115,7 +168,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
           <h2 className="card-title">{t('sheet.traits')}</h2>
           <ul className="plain-list">
             {character.traits.map((tr) => (
-              <li key={tr.name}>{tr.name}</li>
+              <li key={tr.name}>{localSource(lang, tr.name)}</li>
             ))}
           </ul>
         </section>
@@ -145,7 +198,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
         <section key={sc.classId} className="card">
           <h2 className="card-title">
             {t('sheet.spells')}
-            {sheet.spellcasting.length > 1 && ` · ${sheet.classes.find((c) => c.id === sc.classId)?.name}`}
+            {sheet.spellcasting.length > 1 && ` · ${localName(lang, sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)}`}
           </h2>
           <StatLine label={t('sheet.cl')} stat={sc.casterLevel} signed={false} testId="sheet-cl" />
           <StatLine label={t('sheet.concentration')} stat={sc.concentration} testId="sheet-concentration" />
@@ -155,12 +208,33 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
       {/* El spellbook es del personaje; los /día y CD salen de la primera clase lanzadora */}
       {sheet.spellcasting[0] && <Spellbook sc={sheet.spellcasting[0]} spellbook={character.spellbook} onOpen={setCard} />}
 
+      {character.notes && (
+        <section className="card">
+          <h2 className="card-title">{t('sheet.notes')}</h2>
+          <p className="line sheet-notes" data-testid="sheet-notes">
+            {character.notes}
+          </p>
+        </section>
+      )}
+
       {card && (
         <div className="sheet-spell-overlay">
           <SpellCard spell={card} ctx={cardCtx} onClose={() => setCard(null)} />
         </div>
       )}
     </>
+  )
+}
+
+// Una fila del equipo con su peso a la derecha (kg; sin peso anotado, "—").
+function GearRow({ id, weight, lang, children }: { id: string; weight: number | undefined; lang: Lang; children: ReactNode }) {
+  return (
+    <li className="gear-row">
+      <span>{children}</span>
+      <span className="gear-weight" data-testid={`sheet-weight-${id}`}>
+        {weight ? formatKg(weight, lang) : '—'}
+      </span>
+    </li>
   )
 }
 

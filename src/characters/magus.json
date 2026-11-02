@@ -4,6 +4,15 @@
   "race": "human",
   "racialAbilityChoice": "int",
   "alignment": "NG",
+  "bio": {
+    "deity": "Nethys",
+    "homeland": "Lordran",
+    "age": 24,
+    "height": "1,80 m",
+    "weight": "70 kg",
+    "hair": "largo gris",
+    "eyes": "grises"
+  },
   "xp": 333,
   "xpTrack": "slow",
   "abilities": { "str": 16, "dex": 13, "con": 15, "int": 16, "wis": 12, "cha": 12 },
@@ -15,7 +24,7 @@
     { "id": "improved-initiative" }
   ],
   "traits": [],
-  "languages": ["Elven", "Orc", "Draconic"],
+  "languages": ["Elven", "Orc", "Draconic", "Celestial"],
   "skills": {
     "spellcraft": 1,
     "knowledge-arcana": 1,
@@ -32,7 +41,8 @@
       "armorBonus": 4,
       "maxDex": 4,
       "armorCheckPenalty": -2,
-      "arcaneSpellFailure": 20
+      "arcaneSpellFailure": 20,
+      "weight": 12.5
     },
     "weapons": [
       {
@@ -41,7 +51,8 @@
         "category": "one-handed",
         "damage": "1d8",
         "critical": "19-20/x2",
-        "damageType": "S"
+        "damageType": "S",
+        "weight": 2
       }
     ],
     "items": [
@@ -49,16 +60,19 @@
         "id": "boots-of-levitation",
         "name": "Boots of levitation",
         "slot": "feet",
-        "notes": "Levitate at will (CL 3)"
+        "notes": "Levitate at will (CL 3)",
+        "weight": 0.5
       },
-      { "id": "spellbook", "name": "Spellbook" },
-      { "id": "spell-component-pouch", "name": "Spell component pouch" },
-      { "id": "backpack", "name": "Backpack" },
-      { "id": "bedroll", "name": "Bedroll" },
-      { "id": "waterskin", "name": "Waterskin" },
-      { "id": "trail-rations", "name": "Trail rations", "quantity": 3 },
+      { "id": "spellbook", "name": "Spellbook", "weight": 1.5 },
+      { "id": "spell-component-pouch", "name": "Spell component pouch", "weight": 1 },
+      { "id": "backpack", "name": "Backpack", "weight": 1 },
+      { "id": "bedroll", "name": "Bedroll", "weight": 2.5 },
+      { "id": "waterskin", "name": "Waterskin", "weight": 2 },
+      { "id": "trail-rations", "name": "Trail rations", "quantity": 3, "weight": 0.5 },
       { "id": "flint-and-steel", "name": "Flint and steel" },
-      { "id": "belt-pouch", "name": "Belt pouch" }
+      { "id": "belt-pouch", "name": "Belt pouch", "weight": 0.25 },
+      { "id": "potion-cure-light-wounds", "name": "Potion of cure light wounds", "quantity": 2, "consumable": true, "notes": "Heals 1d8+1" },
+      { "id": "potion-invisibility", "name": "Potion of invisibility", "quantity": 1, "consumable": true, "notes": "Invisible for 3 minutes; ends when you attack" }
     ]
   },
   "spellbook": {
@@ -74,5 +88,6 @@
     "0": ["Dancing Lights", "Detect Magic", "Daze"],
     "1": ["Shocking Grasp", "Shield"]
   },
-  "wealth": { "pp": 0, "gp": 0, "sp": 0, "cp": 0 }
+  "wealth": { "pp": 0, "gp": 0, "sp": 0, "cp": 0 },
+  "notes": "Busca a su maestro.\nNo confía en los elfos."
 }

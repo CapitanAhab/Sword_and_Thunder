@@ -2,14 +2,17 @@ import type { Lang } from '../i18n/useT'
 
 // Nombres en castellano por id; los datos quedan en inglés.
 // (en ES todo en español, nombres de conjuros y dotes incluidos). Fuente de los nombres: la terminología de Devir
-// (vía rolroyce.com, 2026-10-31); las dos dotes no se pudieron confirmar (se usan las de la 3.5 de Devir).
+// (vía rolroyce.com, 2026-10-31); las dos dotes llevan los nombres de la 3.5 de Devir.
 export const ES_NAMES: Readonly<Record<string, string>> = {
   // Clases
   magus: 'Magus',
 
   // Magus (acciones y aptitudes; los ids con número, como 'magus-arcana-3', caen en el id sin número)
+  'weapon-armor-proficiency': 'Competencia con armas y armaduras',
+  'magus-spells': 'Conjuros',
   'arcane-pool': 'Reserva arcana',
   'spell-combat': 'Combate con conjuros',
+  'attack-for-concentration': 'Ataque por Conc',
   spellstrike: 'Impacto con conjuro',
   'enhance-weapon': 'Mejorar arma',
   'spell-recall': 'Recordar conjuros',
@@ -38,6 +41,7 @@ export const ES_NAMES: Readonly<Record<string, string>> = {
   elven: 'Élfico',
   orc: 'Orco',
   draconic: 'Dracónico',
+  celestial: 'Celestial',
 
   // Condiciones
   shaken: 'Asustado',
@@ -45,6 +49,7 @@ export const ES_NAMES: Readonly<Record<string, string>> = {
   fatigued: 'Fatigado',
   entangled: 'Enredado',
   grappled: 'Apresado',
+  prone: 'Tumbado',
 
   // Skills
   acrobatics: 'Acrobacias',
@@ -95,6 +100,8 @@ export const ES_NAMES: Readonly<Record<string, string>> = {
   'trail-rations': 'Raciones de viaje',
   'flint-and-steel': 'Yesquero',
   'belt-pouch': 'Riñonera',
+  'potion-cure-light-wounds': 'Poción de curar heridas leves',
+  'potion-invisibility': 'Poción de invisibilidad',
 }
 
 // Escuelas de magia (el campo `school` de src/data/spells.ts queda en inglés, como en el libro).
@@ -181,6 +188,12 @@ export function localSpell(lang: Lang, name: string): string {
   return ES_SPELLS[name] ?? name
 }
 
+// Nombre de un buff activo: el efecto que deja un objeto (por id) o, si no, el conjuro (por nombre).
+const ITEM_BUFFS: Readonly<Record<string, { es: string; en: string }>> = {
+  'potion-invisibility': { es: 'Invisible', en: 'Invisible' },
+}
+export const localBuff = (lang: Lang, id: string): string => ITEM_BUFFS[id]?.[lang] ?? localSpell(lang, id)
+
 // Una línea propia y breve por dote o aptitud (no es el texto del libro: OGL / Community Use). Por id; los ids
 // con número usan el id sin número.
 const SUMMARIES: Readonly<Record<string, { es: string; en: string }>> = {
@@ -191,6 +204,8 @@ const SUMMARIES: Readonly<Record<string, { es: string; en: string }>> = {
   'bonus-feat': { es: 'Una dote extra', en: 'One extra feat' },
   skilled: { es: '+1 rango de habilidad por nivel', en: '+1 skill rank per level' },
   // Magus
+  'weapon-armor-proficiency': { es: 'Armas sencillas y marciales, armadura ligera', en: 'Simple and martial weapons, light armor' },
+  'magus-spells': { es: 'Arcanos, de INT, se preparan del libro', en: 'Arcane, INT-based, prepared from a spellbook' },
   'arcane-pool': { es: 'Puntos para mejorar el arma y potenciar sus aptitudes', en: 'Points to enhance your weapon and fuel class abilities' },
   cantrips: { es: 'Trucos preparados, se lanzan a voluntad', en: 'Prepared cantrips, cast at will' },
   'spell-combat': { es: 'Atacar con el arma y lanzar un conjuro en la misma ronda (−2 al ataque)', en: 'Attack with your weapon and cast a spell in the same round (−2 to attack)' },
@@ -221,6 +236,8 @@ export const localSource = (lang: Lang, source: string): string =>
 // Notas del equipo (el JSON las tiene en inglés).
 const ES_NOTES: Readonly<Record<string, string>> = {
   'boots-of-levitation': 'Levitar a voluntad (NL 3)',
+  'potion-cure-light-wounds': 'Cura 1d8+1',
+  'potion-invisibility': 'Invisible 3 minutos; se corta al atacar',
 }
 
 export function localNote(lang: Lang, id: string, fallback: string | undefined): string | undefined {

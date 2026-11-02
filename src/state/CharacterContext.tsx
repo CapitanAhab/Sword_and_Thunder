@@ -1,13 +1,13 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import raw from '../characters/magus.json'
-import { parseCharacter, type Character } from '../core/schema'
+import { parseCharacter, type Character, type ParseError } from '../core/schema'
 import { computeSheet, type ComputedSheet } from '../core/compute'
 import { db } from '../data'
 
 // Personaje base (el JSON del repo) ya validado y calculado. Más adelante, la subida de nivel podrá sumar un override desde localStorage.
 export type CharacterState =
   | { ok: true; character: Character; sheet: ComputedSheet }
-  | { ok: false; errors: string[] }
+  | { ok: false; errors: ParseError[] }
 
 const CharacterCtx = createContext<CharacterState | null>(null)
 

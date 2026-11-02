@@ -57,6 +57,8 @@ export const magus: ClassDef = {
       minLevel: 1,
       appliesTo: (w) => w.category === 'light' || w.category === 'one-handed',
       modifiers: [{ target: 'attack', type: 'untyped', value: -2 }],
+      // A la defensiva: hasta −INT al ataque, que se suma a la concentración
+      defensiveTrade: true,
     },
   ],
   actions: [
@@ -67,6 +69,8 @@ export const magus: ClassDef = {
     { id: 'knowledge-pool', name: 'Knowledge Pool', minLevel: 7, menu: 'pool', kind: 'spend', actionType: 'swift', cost: { resource: 'arcane-pool', amount: 1 } },
   ],
   features: [
+    { id: 'weapon-armor-proficiency', name: 'Weapon and Armor Proficiency', level: 1 },
+    { id: 'magus-spells', name: 'Spells', level: 1 },
     { id: 'arcane-pool', name: 'Arcane Pool', level: 1 },
     { id: 'cantrips', name: 'Cantrips', level: 1 },
     { id: 'spell-combat', name: 'Spell Combat', level: 1 },

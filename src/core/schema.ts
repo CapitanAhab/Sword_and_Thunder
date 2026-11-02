@@ -73,6 +73,7 @@ const armorSchema = z.object({
   arcaneSpellFailure: z.number().int().min(0).max(100).default(0), // %
   enhancement: z.number().int().nonnegative().default(0),
   masterwork: z.boolean().default(false),
+  weight: z.number().nonnegative().optional(), // kg, como el libro en castellano (para la carga)
 })
 
 const shieldSchema = z.object({
@@ -83,6 +84,7 @@ const shieldSchema = z.object({
   arcaneSpellFailure: z.number().int().min(0).max(100).default(0),
   enhancement: z.number().int().nonnegative().default(0),
   masterwork: z.boolean().default(false),
+  weight: z.number().nonnegative().optional(), // kg, como el libro en castellano (para la carga)
 })
 
 export const weaponCategorySchema = z.enum(['light', 'one-handed', 'two-handed', 'ranged', 'thrown'])
@@ -99,6 +101,7 @@ const weaponSchema = z.object({
   enhancement: z.number().int().nonnegative().default(0),
   masterwork: z.boolean().default(false),
   notes: z.string().optional(),
+  weight: z.number().nonnegative().optional(), // kg, como el libro en castellano (para la carga)
 })
 export type Weapon = z.infer<typeof weaponSchema>
 
@@ -112,7 +115,23 @@ const itemSchema = z.object({
   consumable: z.boolean().default(false),
   notes: z.string().optional(),
   modifiers: z.array(modifierInputSchema).default([]),
+  weight: z.number().nonnegative().optional(), // kg por unidad
 })
+
+// Datos personales de la ficha oficial: todos opcionales y en texto libre ("1,80 m", "25"; un número también vale).
+const bioText = z.union([z.string(), z.number()]).transform(String).optional()
+export const bioSchema = z.object({
+  deity: bioText,
+  homeland: bioText,
+  gender: bioText,
+  age: bioText,
+  height: bioText,
+  weight: bioText,
+  hair: bioText,
+  eyes: bioText,
+})
+export type Bio = z.infer<typeof bioSchema>
+export const BIO_FIELDS = ['deity', 'homeland', 'gender', 'age', 'height', 'weight', 'hair', 'eyes'] as const
 
 export const characterSchema = z.object({
   schemaVersion: z.literal(1),
@@ -149,17 +168,49 @@ export const characterSchema = z.object({
     })
     .default({ pp: 0, gp: 0, sp: 0, cp: 0 }),
   notes: z.string().optional(),
+  bio: bioSchema.optional(),
 })
 export type Character = z.infer<typeof characterSchema>
 export type CharacterInput = z.input<typeof characterSchema>
 
-export type ParseResult = { ok: true; character: Character } | { ok: false; errors: string[] }
+// Un error del JSON, sin texto: la vista lo arma en el idioma activo.
+//   missing = falta el dato · type = tipo equivocado · value = no es una de las opciones · min / max = fuera de rango
+export type ParseErrorKind = 'missing' | 'type' | 'value' | 'min' | 'max' | 'other'
+export interface ParseError {
+  path: string // ruta en el JSON, ej. 'abilities.str' ('(root)' si es el archivo entero)
+  kind: ParseErrorKind
+  expected?: string // tipo esperado ('number', 'string', 'boolean', 'array', 'object'…)
+  received?: string // tipo que hay
+  options?: string // valores válidos, separados por coma
+  limit?: string // mínimo o máximo
+}
+export type ParseResult = { ok: true; character: Character } | { ok: false; errors: ParseError[] }
+
+type ZodIssue = z.ZodError['issues'][number]
+const typeOf = (v: unknown) => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v)
+const valueAt = (json: unknown, path: readonly PropertyKey[]): unknown =>
+  path.reduce<unknown>((v, k) => (v !== null && typeof v === 'object' ? (v as Record<PropertyKey, unknown>)[k] : undefined), json)
+
+function toParseError(json: unknown, issue: ZodIssue): ParseError {
+  const path = issue.path.map(String).join('.') || '(root)'
+  switch (issue.code) {
+    case 'invalid_type': {
+      const value = valueAt(json, issue.path)
+      return value === undefined ? { path, kind: 'missing' } : { path, kind: 'type', expected: issue.expected, received: typeOf(value) }
+    }
+    case 'invalid_value':
+      return { path, kind: 'value', options: issue.values.map(String).join(', ') }
+    case 'too_small':
+      return { path, kind: 'min', limit: String(issue.minimum) }
+    case 'too_big':
+      return { path, kind: 'max', limit: String(issue.maximum) }
+    default:
+      return { path, kind: 'other' }
+  }
+}
 
 export function parseCharacter(json: unknown): ParseResult {
   const result = characterSchema.safeParse(json)
   if (result.success) return { ok: true, character: result.data }
-  return {
-    ok: false,
-    errors: result.error.issues.map((i) => `${i.path.map(String).join('.') || '(root)'}: ${i.message}`),
-  }
+  return { ok: false, errors: result.error.issues.map((i) => toParseError(json, i)) }
 }

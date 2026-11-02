@@ -21,6 +21,30 @@ export function spellRangeFt(range: SpellRange, casterLevel: number): number | n
 // Lanzar a la defensiva: chequeo de concentración contra 15 + 2 × nivel del conjuro.
 export const defensiveCastingDc = (spellLevel: number) => 15 + 2 * spellLevel
 
+// Otros chequeos de concentración (CRB, cap. 9): enredado, 15 + nivel; apresado, 10 + nivel + BMC del que te apresa;
+// si te dañan mientras lanzás, 10 + nivel + el daño. En los dos últimos, una parte se sabe recién en la mesa.
+export const entangledCastingDc = (spellLevel: number) => 15 + spellLevel
+export const castingDcBase = (spellLevel: number) => 10 + spellLevel
+
+// Qué chequeo de concentración mostrar, del más exigente al de siempre (si te pegan mientras lanzás).
+export type ConcentrationCase = 'grappled' | 'defensive' | 'entangled' | 'damage'
+export function concentrationCase(conditions: readonly string[], castDefensively: boolean): ConcentrationCase {
+  if (conditions.includes('grappled')) return 'grappled'
+  if (castDefensively) return 'defensive'
+  if (conditions.includes('entangled')) return 'entangled'
+  return 'damage'
+}
+
+// Ataques de oportunidad que provoca lanzar en una casilla amenazada, por motivo: lanzar (salvo a la defensiva) y,
+// aparte, el ataque de toque a distancia (rayos y similares), que provoca aunque se lance a la defensiva.
+export interface SpellAoO {
+  cast: boolean
+  attack: boolean
+}
+export function spellAoO(attack: 'melee-touch' | 'ranged-touch' | undefined, castDefensively: boolean): SpellAoO {
+  return { cast: !castDefensively, attack: attack === 'ranged-touch' }
+}
+
 // Daño de un conjuro según el nivel de lanzador. 'cl' = uno por nivel, con tope opcional.
 export interface SpellDamage {
   dice: number | 'cl'

@@ -7,10 +7,11 @@ import type { MenuItem } from './menus'
 // Con columnas, `line` y `note` bajan a la descripción. Si algo no entra, termina en "…" y aparece ⓘ:
 // tocar el panel abre la tarjeta (la del conjuro, o DetailCard con el texto completo).
 export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: () => void }) {
+  const testId = 'play-detail'
   const { t, lang } = useT()
   const ref = useRef<HTMLElement | null>(null)
   const [overflow, setOverflow] = useState(false)
-  const { title, tag, stats, line, note, extra, warn } = item.detail
+  const { title, tag, stats, line, lineWarn, note, extra, warn } = item.detail
   const desc = (stats ? [line, note] : [note, extra]).filter((s): s is string => Boolean(s))
   const tappable = Boolean(item.spell) || overflow
   const key = `${lang}|${JSON.stringify(item.detail)}`
@@ -57,7 +58,7 @@ export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: 
             ))}
           </div>
         ) : (
-          line && <div className="d-line fit">{line}</div>
+          line && <div className={lineWarn ? 'd-line fit d-warn' : 'd-line fit'}>{line}</div>
         )}
       </div>
       <div className="d-desc">
@@ -85,12 +86,12 @@ export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: 
       ref={setRef}
       onClick={onOpenCard}
       aria-label={t(item.spell ? 'play.cardHint' : 'play.detailHint')}
-      data-testid="play-detail"
+      data-testid={testId}
     >
       {body}
     </button>
   ) : (
-    <div className="detail" ref={setRef} data-testid="play-detail">
+    <div className="detail" ref={setRef} data-testid={testId}>
       {body}
     </div>
   )

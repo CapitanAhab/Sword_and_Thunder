@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type TouchEvent } from 'react'
 import { useT } from '../../i18n/useT'
+import type { MessageKey } from '../../i18n/es'
+import type { ParseError } from '../../core/schema'
 import { href } from '../../router'
 import { useCharacter } from '../../state/CharacterContext'
 import { IssuesBanner } from './IssuesBanner'
@@ -12,6 +14,22 @@ import './sheet.css'
 const PAGES = [1, 2] as const
 type Page = (typeof PAGES)[number]
 const PAGE_KEY = 'sat.sheet.page'
+
+// Un error del JSON en el idioma activo: "abilities.str: tiene que ser un número (hay un texto)".
+const TYPE_KEYS: Record<string, MessageKey> = {
+  number: 'parseError.t.number', string: 'parseError.t.string', boolean: 'parseError.t.boolean',
+  array: 'parseError.t.array', object: 'parseError.t.object', null: 'parseError.t.null',
+}
+function parseErrorText(t: (key: MessageKey) => string, e: ParseError): string {
+  const typeName = (type = '') => {
+    const key = TYPE_KEYS[type]
+    return key ? t(key) : type
+  }
+  const vars: Record<string, string> = {
+    path: e.path, expected: typeName(e.expected), received: typeName(e.received), options: e.options ?? '', limit: e.limit ?? '',
+  }
+  return Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), t(`parseError.${e.kind}`))
+}
 const SWIPE_PX = 60
 
 function readStoredPage(): Page {
@@ -37,17 +55,45 @@ export function SheetScreen() {
     shownPage.current = page
   }, [page])
 
+  // La fila de arriba: páginas, ▶ JUGAR y el idioma. Con el JSON roto, las páginas van apagadas.
+  const nav = (onSelect?: (p: Page) => void) => (
+    <nav className="pages">
+      {PAGES.map((p) => (
+        <button
+          key={p}
+          type="button"
+          className="page-btn"
+          aria-current={onSelect && page === p ? 'page' : undefined}
+          disabled={!onSelect}
+          onClick={() => onSelect?.(p)}
+          data-testid={`sheet-page-${p}`}
+        >
+          {t(`sheet.page.${p}`)}
+        </button>
+      ))}
+      <a className="page-btn page-link" href={href('play')} data-testid="sheet-play">
+        ▶ {t('nav.play')}
+      </a>
+      <button type="button" className="page-btn page-link" onClick={toggleLang} data-testid="lang-toggle">
+        {t('lang.toggle')}
+      </button>
+    </nav>
+  )
+
   if (!state.ok) {
     return (
-      <section className="sheet" data-testid="sheet-parse-errors">
-        <h1>{t('sheet.parseError')}</h1>
-        <ul>
-          {state.errors.map((e) => (
-            <li key={e}>
-              <code>{e}</code>
-            </li>
-          ))}
-        </ul>
+      <section className="sheet">
+        {nav()}
+        <div data-testid="sheet-parse-errors">
+          <h1>{t('sheet.parseError')}</h1>
+          <ul>
+            {state.errors.map((e, i) => (
+              <li key={`${i}:${e.path}`}>
+                <code>{parseErrorText(t, e)}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
     )
   }
@@ -77,26 +123,7 @@ export function SheetScreen() {
 
   return (
     <section className="sheet">
-      <nav className="pages">
-        {PAGES.map((p) => (
-          <button
-            key={p}
-            type="button"
-            className="page-btn"
-            aria-current={page === p ? 'page' : undefined}
-            onClick={() => selectPage(p)}
-            data-testid={`sheet-page-${p}`}
-          >
-            {t(`sheet.page.${p}`)}
-          </button>
-        ))}
-        <a className="page-btn page-link" href={href('play')} data-testid="sheet-play">
-          ▶ {t('nav.play')}
-        </a>
-        <button type="button" className="page-btn page-link" onClick={toggleLang} data-testid="lang-toggle">
-          {t('lang.toggle')}
-        </button>
-      </nav>
+      {nav(selectPage)}
       <IssuesBanner sheet={sheet} />
       <div
         className="page"

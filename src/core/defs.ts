@@ -29,6 +29,9 @@ export interface AttackVariantDef {
   minLevel: number
   appliesTo: (weapon: Weapon) => boolean
   modifiers: ModifierInput[]
+  // Lanzando a la defensiva, se puede tomar un penalizador extra al ataque (hasta el mod. del atributo de
+  // lanzamiento) y sumarlo a la concentración como bono de circunstancia.
+  defensiveTrade?: boolean
 }
 
 // Acción de clase para el menú de #/play. Aparece sola desde minLevel.

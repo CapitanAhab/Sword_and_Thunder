@@ -2,18 +2,22 @@ import { useEffect, useRef, useState } from 'react'
 import { useT } from '../../i18n/useT'
 import { href } from '../../router'
 import { useSession } from '../../state/SessionContext'
-import { changeHp, clampHp, currentHp, hpState, nextTurn, resourceLeft } from '../../core/session'
+import { changeHp, clampHp, currentHp, hpState, resourceLeft, trackUndo } from '../../core/session'
 import { STANCES, type StanceId } from '../../core/rules/pf1e/actions'
 import { formatValue, minus } from '../sheet/labels'
-import { localName, localSpell } from '../../data/names'
+import { localBuff, localName, localSpell } from '../../data/names'
 import { fire, hpBarMs, isMuted, setMuted, type HpSide } from './fx/effects'
+import { externalLabel } from './menus'
 
 // HUD de arriba: solo mirar. Interacciones: la barra de HP (tocar → [−] 7/11 (−4) [+], se aplica sola a los 1,5 s)
-// y, en combate, MI TURNO ▸ (avanza la ronda: core/session.ts → nextTurn).
+// y, en combate, MI TURNO ▸ (onTurn: la pantalla avanza la ronda y vuelve al menú principal).
+// healRequest: cada vez que cambia (se tomó una poción de curar), se abre el editor para sumar la cura.
 const APPLY_MS = 1500
 const HOLD_MS = 400
+// Después de una poción, el editor espera más antes de cerrarse solo: hay que tirar el dado
+const HEAL_WAIT_MS = 10000
 
-export function Hud() {
+export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healRequest?: number }) {
   const { t, lang, toggleLang } = useT()
   const { sheet, session, update } = useSession()
   const [muted, setMutedState] = useState(isMuted)
@@ -42,12 +46,13 @@ export function Hud() {
     if (!delta) return
     const s: HpSide = delta < 0 ? 'damage' : 'heal'
     setSide(s)
-    update((x) => changeHp(sheet, x, delta))
+    // Se puede deshacer (mantener ✕ en el menú principal): "PG −4". Es un paso propio, fuera de cualquier flujo.
+    update((x) => trackUndo(x, changeHp(sheet, x, delta), `${t('sheet.hp')} ${formatValue(delta, true)}`, false))
     fire('hpChange', { side: s, target: hudRef.current })
   }
-  const schedule = () => {
+  const schedule = (wait = APPLY_MS) => {
     window.clearTimeout(idle.current)
-    idle.current = window.setTimeout(commit, APPLY_MS)
+    idle.current = window.setTimeout(commit, wait)
   }
   const step = (d: number) => {
     const next = clampHp(sheet, hp + pendingRef.current + d) - hp
@@ -67,11 +72,15 @@ export function Hud() {
     hold.current = window.setTimeout(tick, HOLD_MS)
   }
   const release = () => window.clearTimeout(hold.current)
-  const openEditor = () => {
+  const openEditor = (wait = APPLY_MS) => {
     pendingRef.current = 0
     setPending(0)
-    schedule()
+    schedule(wait)
   }
+  // Poción de curar: el editor se abre solo, para sumar lo que salió en el dado
+  useEffect(() => {
+    if (healRequest && !dead) openEditor(HEAL_WAIT_MS)
+  }, [healRequest])
 
   const pool = sheet.resources[0]
   const perception = sheet.skills.find((s) => s.id === 'perception')
@@ -79,17 +88,15 @@ export function Hud() {
   const chips = [
     ...(session.stance && session.stance in STANCES ? [{ id: session.stance, text: t(`stanceChip.${session.stance as StanceId}`) }] : []),
     ...(session.charging ? [{ id: 'charged', text: t('play.chip.charged') }] : []),
+    ...(session.readied ? [{ id: 'readied', text: t('play.chip.readied') }] : []),
     ...(session.enhancement ? [{ id: 'enhancement', text: `${t('play.chip.weapon')} +${session.enhancement.bonus}${rounds(session.enhancement.rounds)}` }] : []),
     ...session.conditions.map((c) => ({ id: c, text: localName(lang, c, c.charAt(0).toUpperCase() + c.slice(1)) })),
-    ...session.buffs.map((b) => ({ id: `buff-${b}`, text: `${localSpell(lang, b)}${rounds(session.buffRounds[b])}` })),
+    ...session.buffs.map((b) => ({ id: `buff-${b}`, text: `${localBuff(lang, b)}${rounds(session.buffRounds[b])}` })),
+    ...session.external.map((e) => ({ id: `ext-${e.id}`, text: `${externalLabel(t, e)}${rounds(e.rounds)}` })),
     ...(session.held ? [{ id: 'held', text: `${t('play.chip.held')}: ${localSpell(lang, session.held.name)}${session.held.charges > 1 ? ` ×${session.held.charges}` : ''}` }] : []),
     ...(session.castDefensively ? [{ id: 'defensive', text: t('play.chip.defensive') }] : []),
   ]
   const combat = session.combat
-  const myTurn = () => {
-    update(nextTurn)
-    fire('submenuEnter', { noAnim: true })
-  }
   const saves = [
     { id: 'fort', label: t('sheet.fort'), value: sheet.saves.fort.total },
     { id: 'ref', label: t('sheet.ref'), value: sheet.saves.ref.total },
@@ -108,7 +115,7 @@ export function Hud() {
             <span className="hud-name hud-round" data-testid="hud-round">
               ⚔ {combat.round ? `${t('play.round')} ${combat.round}` : t('play.combat')}
             </span>
-            <button type="button" className="hud-turn" onClick={myTurn} data-testid="btn-turn">
+            <button type="button" className="hud-turn" onClick={onTurn} data-testid="btn-turn">
               {t('play.myTurn')}
             </button>
           </>
@@ -130,7 +137,7 @@ export function Hud() {
       </div>
 
       {pending === null ? (
-        <button type="button" className="hud-hp" onClick={dead ? undefined : openEditor} aria-label={dead ? t('hpState.dead') : t('play.hpEdit')} aria-disabled={dead || undefined}>
+        <button type="button" className="hud-hp" onClick={dead ? undefined : () => openEditor()} aria-label={dead ? t('hpState.dead') : t('play.hpEdit')} aria-disabled={dead || undefined}>
           <span className="hud-hp-ico">{dead ? '☠' : '♥'}</span>
           <span data-testid="hud-hp">
             {minus(String(hp))}/{sheet.hp.total}

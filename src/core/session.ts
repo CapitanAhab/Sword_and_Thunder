@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import type { ComputedSheet, SessionContext } from './compute'
 import type { Modifier } from './modifiers'
-import { modifierInputSchema, type Character, type ModifierInput } from './schema'
+import { modifierInputSchema, type Ability, type Character, type ModifierInput } from './schema'
 import {
-  CHARGE, CHARGED, COMMON_EFFECTS, CONDITIONS, FREE_TARGETS, HALF_SPEED, NO_CHARGE, PRONE_AC, REST_CLEARS, STANCES,
+  CHARGE, CHARGED, COMMON_EFFECTS, CONDITIONS, FREE_TARGETS, HALF_SPEED, LOSE_DEX_AC, NO_ACTIONS, NO_CHARGE, PRONE_AC, REPLACES, REST_CLEARS, STANCES,
   type ActionKind, type CommonEffectId, type ConditionId, type FreeField, type StanceId,
 } from './rules/pf1e/actions'
 
@@ -44,6 +44,9 @@ export const sessionSchema = z.object({
   charging: z.boolean().default(false), // cargaste: −2 CA hasta tu próximo turno
   readied: z.boolean().default(false), // preparaste una acción: dura hasta que actuás o hasta tu próximo turno
   beforeDeath: z.number().int().nonnegative().nullable().default(null), // `damage` de antes del golpe que lo mató (para "Me equivoqué")
+  tempHp: z.number().int().nonnegative().default(0), // PG temporales: el daño los gasta primero
+  nonlethal: z.number().int().nonnegative().default(0),
+  abilityDamage: z.record(z.string(), z.number().int().positive()).default({}), // atributo → puntos que le faltan
   // Deshacer (un paso): qué fue lo último y cómo estaba la sesión antes. `before` se valida al deshacer.
   undo: z.object({ label: z.string(), before: z.unknown() }).nullable().default(null),
 })
@@ -69,7 +72,7 @@ export function newSession(character: Character): Session {
 // Se deshace solo lo que gasta o devuelve recursos: PG, usos de recursos (⚡), conjuros lanzados (◆), objetos usados
 // y la carga en la mano. Todo lo demás (atacar, ON/OFF, combate, NUEVO TURNO, Preparar suelto) borra lo que había, porque
 // deshacer después volvería atrás también eso.
-const RESOURCE_KEYS = ['damage', 'resourcesUsed', 'cast', 'itemsUsed', 'held'] as const
+const RESOURCE_KEYS = ['damage', 'tempHp', 'resourcesUsed', 'cast', 'itemsUsed', 'held'] as const
 export const changesResources = (before: Session, after: Session): boolean =>
   RESOURCE_KEYS.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
 
@@ -89,12 +92,6 @@ export function undoLast(s: Session): Session {
   if (!s.undo) return s
   const result = sessionSchema.safeParse(s.undo.before)
   return result.success ? { ...result.data, undo: null } : clearUndo(s)
-}
-
-// Si lo guardado no valida, se usa `fallback` (por defecto, una sesión vacía).
-export function parseSession(json: unknown, fallback: () => Session = emptySession): Session {
-  const result = sessionSchema.safeParse(json)
-  return result.success ? result.data : fallback()
 }
 
 // Lo guardado, campo por campo: un campo que no valida vuelve a su valor inicial y el resto se conserva.
@@ -254,8 +251,10 @@ export function toSessionContext(s: Session, buffMods: Readonly<Record<string, r
       ...s.conditions.filter(isCondition).flatMap((c) => withSource(CONDITIONS[c], c)),
       ...s.buffs.flatMap((b) => withSource(buffMods[b] ?? [], b)),
       ...s.external.flatMap((e) => withSource(e.mods, e.id)),
+      ...Object.entries(s.abilityDamage).flatMap(([a, n]) => withSource([{ target: `ability.${a as Ability}`, type: 'untyped', value: -n }], 'ability-damage')),
     ],
     conditions: s.castDefensively ? [...s.conditions, 'casting-defensively'] : s.conditions,
+    loseDexToAc: s.conditions.some((c) => (LOSE_DEX_AC as readonly string[]).includes(c)),
     // El cambio de ataque por concentración solo vale a la defensiva
     defensiveTrade: s.castDefensively ? s.spellCombatTrade : 0,
   }
@@ -296,8 +295,10 @@ export function clampHp(sheet: ComputedSheet, hp: number): number {
 // Si te morís, te morís: muerto no se cura ni descansa (solo undoDeath o revive). El golpe que mata guarda el daño de antes.
 export function changeHp(sheet: ComputedSheet, s: Session, delta: number): Session {
   if (hpState(sheet, s) === 'dead') return s
-  const hp = clampHp(sheet, currentHp(sheet, s) + delta)
-  const next = { ...s, damage: sheet.hp.total - hp }
+  // El daño gasta primero los PG temporales; curar baja también el daño no letal.
+  const absorbed = delta < 0 ? Math.min(s.tempHp, -delta) : 0
+  const hp = clampHp(sheet, currentHp(sheet, s) + delta + absorbed)
+  const next = { ...s, damage: sheet.hp.total - hp, tempHp: s.tempHp - absorbed, nonlethal: Math.max(0, s.nonlethal - Math.max(0, delta)) }
   return hpState(sheet, next) === 'dead' ? { ...next, beforeDeath: s.damage } : next
 }
 
@@ -312,14 +313,14 @@ export function hpState(sheet: ComputedSheet, s: Session): HpState {
 // Qué acciones le quedan (PF1e):
 //   'any'    en pie;
 //   'single' turno restringido: una sola acción estándar o de movimiento, nada de ronda completa.
-//            Incapacitado (0 PG; la estándar le saca 1 PG después) o ronda sorpresa (sin costo);
+//            Incapacitado (0 PG; la estándar le saca 1 PG después), ronda sorpresa o tambaleante (sin costo);
 //   'none'   moribundo: inconsciente, sin acciones.
 // Muerto tiene su propia pantalla.
 export type ActionLimit = 'any' | 'single' | 'none'
 export function actionLimit(sheet: ComputedSheet, s: Session): ActionLimit {
   const state = hpState(sheet, s)
   if (state === 'dying') return 'none'
-  return state === 'disabled' || (s.surprise && s.combat) ? 'single' : 'any'
+  return state === 'disabled' || (s.surprise && s.combat) || s.conditions.includes('staggered') ? 'single' : 'any'
 }
 
 // ¿Se puede hacer una acción de ese tipo?
@@ -328,12 +329,16 @@ export function actionLimit(sheet: ComputedSheet, s: Session): ActionLimit {
 //                   lo rápido y lo de fuera del turno (Descansar, Preparar) se puede sin costo;
 //   ronda sorpresa → nada de ronda completa, sin costo.
 // heals: la acción cura (una poción); a 0 PG no cuesta el PG, porque te deja con más.
-export type ActionCheck = { allowed: false; reason: 'dying' | 'disabled-full' | 'surprise-full' } | { allowed: true; hpCost: 0 | 1 }
+export type ActionCheck = { allowed: false; reason: 'dying' | 'stunned' | 'nauseated' | 'disabled-full' | 'staggered-full' | 'surprise-full' } | { allowed: true; hpCost: 0 | 1 }
 export function checkAction(sheet: ComputedSheet, s: Session, kind: ActionKind, heals = false): ActionCheck {
   const limit = actionLimit(sheet, s)
   const disabled = hpState(sheet, s) === 'disabled'
   if (limit === 'none') return { allowed: false, reason: 'dying' }
-  if (limit === 'single' && kind === 'full') return { allowed: false, reason: disabled ? 'disabled-full' : 'surprise-full' }
+  const stopped = NO_ACTIONS.find((c) => s.conditions.includes(c))
+  if (stopped && kind !== 'downtime') return { allowed: false, reason: stopped === 'stunned' ? 'stunned' : 'nauseated' }
+  if (limit === 'single' && kind === 'full') {
+    return { allowed: false, reason: disabled ? 'disabled-full' : s.conditions.includes('staggered') ? 'staggered-full' : 'surprise-full' }
+  }
   return { allowed: true, hpCost: disabled && kind === 'standard' && !heals ? 1 : 0 }
 }
 
@@ -526,8 +531,20 @@ export const toggleStance = (s: Session, id: StanceId): Session => ({ ...s, stan
 
 export const toggleCondition = (s: Session, id: ConditionId): Session => ({
   ...s,
-  conditions: s.conditions.includes(id) ? s.conditions.filter((c) => c !== id) : [...s.conditions, id],
+  conditions: s.conditions.includes(id) ? s.conditions.filter((c) => c !== id) : [...s.conditions.filter((c) => c !== REPLACES[id]), id],
 })
+
+// PG temporales, daño no letal y daño de atributo: valores que se cargan a mano con − / +.
+export type ValueKind = 'temp-hp' | 'nonlethal' | Ability
+export const valueOf = (s: Session, kind: ValueKind): number =>
+  kind === 'temp-hp' ? s.tempHp : kind === 'nonlethal' ? s.nonlethal : (s.abilityDamage[kind] ?? 0)
+export function setValue(s: Session, kind: ValueKind, n: number): Session {
+  const value = Math.max(0, Math.min(99, n))
+  if (kind === 'temp-hp') return { ...s, tempHp: value }
+  if (kind === 'nonlethal') return { ...s, nonlethal: value }
+  const { [kind]: _, ...rest } = s.abilityDamage
+  return { ...s, abilityDamage: value ? { ...rest, [kind]: value } : rest }
+}
 
 // La mejora dura 1 minuto: en combate se cuenta en rondas.
 export const ENHANCEMENT_ROUNDS = 10
@@ -673,7 +690,12 @@ export function rest(sheet: ComputedSheet, s: Session): Session {
   if (hpState(sheet, s) === 'dead' || !checkAction(sheet, s, 'downtime').allowed) return s
   return {
     ...changeHp(sheet, s, sheet.level),
-    conditions: s.conditions.filter((c) => !(isCondition(c) && REST_CLEARS.includes(c))),
+    // Agotado baja a Fatigado; el resto de lo que se va con el descanso, se va.
+    conditions: s.conditions.filter((c) => !(isCondition(c) && REST_CLEARS.includes(c))).map((c) => (c === 'exhausted' ? 'fatigued' : c)),
+    tempHp: 0,
+    nonlethal: 0,
+    // Se recupera 1 punto por día en cada atributo.
+    abilityDamage: Object.fromEntries(Object.entries(s.abilityDamage).filter(([, n]) => n > 1).map(([a, n]) => [a, n - 1])),
     resourcesUsed: {},
     cast: {},
     stance: null,

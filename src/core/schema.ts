@@ -106,7 +106,7 @@ const weaponSchema = z.object({
 export type Weapon = z.infer<typeof weaponSchema>
 
 // Los modifiers de un ítem aplican si está equipado y no es consumible.
-const itemSchema = z.object({
+export const itemSchema = z.object({
   id: z.string(),
   name: z.string(),
   slot: z.string().optional(),

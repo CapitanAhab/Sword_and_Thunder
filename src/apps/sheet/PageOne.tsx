@@ -85,19 +85,19 @@ export function PageOne({ sheet }: { sheet: ComputedSheet }) {
 // Magia: nivel de lanzador, concentración y fallo arcano de cada clase lanzadora, y los recursos de clase
 // (la Reserva arcana con su mejora máxima).
 function MagicBlock({ sheet, open, onToggle }: { sheet: ComputedSheet; open: string | null; onToggle: (id: string) => void }) {
-  const { t, lang } = useT()
+  const { t } = useT()
   if (!sheet.spellcasting.length && !sheet.resources.length) return null
   const many = sheet.spellcasting.length > 1
   const is = (i: PanelStat) => ({ item: i, open: open === i.testId, onToggle })
   const casting = sheet.spellcasting.map((sc) => {
-    const who = many ? ` (${localName(lang, sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)})` : ''
+    const who = many ? ` (${localName(sc.classId, sheet.classes.find((c) => c.id === sc.classId)?.name ?? sc.classId)})` : ''
     const items: PanelStat[] = [
       { testId: 'sheet-cl', label: t('sheet.cl') + who, stat: sc.casterLevel, signed: false },
       { testId: 'sheet-concentration', label: t('sheet.concentration'), stat: sc.concentration },
     ]
     return { sc, items }
   })
-  const resources: PanelStat[] = sheet.resources.map((r) => ({ testId: `sheet-resource-${r.id}`, label: localName(lang, r.id, r.name), stat: r.max, signed: false }))
+  const resources: PanelStat[] = sheet.resources.map((r) => ({ testId: `sheet-resource-${r.id}`, label: localName(r.id, r.name), stat: r.max, signed: false }))
   const all = [...casting.flatMap((c) => c.items), ...resources]
   return (
     <Block title={t('sheet.section.magic')} arcane>
@@ -132,17 +132,17 @@ function MagicBlock({ sheet, open, onToggle }: { sheet: ComputedSheet; open: str
 // Un arma: el nombre con crítico · tipo · alcance, y una fila por variante (ataque y daño). Tocar una variante
 // abre su desglose del ataque y el del daño.
 function AttackBlock({ attack, open, onToggle }: { attack: AttackLine; open: string | null; onToggle: (id: string) => void }) {
-  const { t, lang } = useT()
-  const named = (s: string) => localSource(lang, s)
+  const { t } = useT()
+  const named = (s: string) => localSource(s)
   const meta = [prettyCrit(attack.critical), attack.damageType && damageTypeLabel(t, attack.damageType), attack.range && `${attack.range} ${t('sheet.ft')}`]
   const damageParts = attack.variants[0] ? statParts(t, attack.variants[0].damage, true, named) : ''
-  const nameOf = (id: string, fallback: string) => (id === 'standard' ? t('sheet.attack.standard') : localName(lang, id, fallback))
+  const nameOf = (id: string, fallback: string) => (id === 'standard' ? t('sheet.attack.standard') : localName(id, fallback))
   const openVariant = attack.variants.find((v) => open === `sheet-attack-${attack.id}-${v.id}`)
   const openParts = openVariant ? statParts(t, openVariant.attack, true, named) : ''
 
   return (
     <Block
-      title={localName(lang, attack.id, attack.name)}
+      title={localName(attack.id, attack.name)}
       meta={meta.filter(Boolean).map((m) => (
         <span key={String(m)}>{m}</span>
       ))}
@@ -189,11 +189,11 @@ function AttackBlock({ attack, open, onToggle }: { attack: AttackLine; open: str
 
 // Habilidades (página 2, dentro de su plegable). Por defecto solo las que tienen rangos; el botón muestra las demás.
 export function SkillsCard({ sheet }: { sheet: ComputedSheet }) {
-  const { t, lang } = useT()
+  const { t } = useT()
   const [showAll, setShowAll] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null) // un solo desglose abierto a la vez (no se guarda)
   // Orden alfabético por el nombre que se ve (cambia con el idioma)
-  const byName = (a: SkillLine, b: SkillLine) => localName(lang, a.id, a.name).localeCompare(localName(lang, b.id, b.name), lang)
+  const byName = (a: SkillLine, b: SkillLine) => localName(a.id, a.name).localeCompare(localName(b.id, b.name), 'es')
   const visible = (showAll ? sheet.skills : sheet.skills.filter((s) => s.ranks > 0)).slice().sort(byName)
 
   return (
@@ -213,14 +213,14 @@ export function SkillsCard({ sheet }: { sheet: ComputedSheet }) {
 
 // Una fila usable se toca para abrir su desglose ("+4 INT · 1 rango · +3 de clase"); las que piden rangos y no tienen ("—"), no.
 function SkillRow({ skill, open, onToggle }: { skill: SkillLine; open: boolean; onToggle: () => void }) {
-  const { t, lang } = useT()
-  const parts = skill.usable ? statParts(t, skill.stat, true, (s) => localSource(lang, s), SKILL_SEP) : ''
+  const { t } = useT()
+  const parts = skill.usable ? statParts(t, skill.stat, true, (s) => localSource(s), SKILL_SEP) : ''
   const cells = (
     <>
       <span className="skill-mark" aria-hidden>
         {skill.classSkill ? '●' : ''}
       </span>
-      <span className="skill-name">{localName(lang, skill.id, skill.name)}</span>
+      <span className="skill-name">{localName(skill.id, skill.name)}</span>
       <span className="skill-arrow muted" aria-hidden>
         {parts ? (open ? '▴' : '▾') : ''}
       </span>

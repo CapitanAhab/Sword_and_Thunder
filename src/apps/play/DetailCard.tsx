@@ -1,4 +1,5 @@
 import { useT } from '../../i18n/useT'
+import { useCardFx } from './fx/useCardFx'
 import type { MenuItem } from './menus'
 
 // Tarjeta con el detalle completo de un ítem (mismo marco que SpellCard), a pantalla completa:
@@ -9,12 +10,13 @@ const BIG_MAX = 8 // `line` corto (un número, "+5", "15") va grande al lado del
 
 export function DetailCard({ detail, where, onClose }: { detail: MenuItem['detail']; where?: string; onClose: () => void }) {
   const { t } = useT()
+  const cardRef = useCardFx()
   const { title, tag, stats, line, note, extra, warn, parts } = detail
   const big = line && line.length <= BIG_MAX ? line : undefined
   // Con filas, `note` es el mismo desglose en una línea: no se repite
   const texts = [big ? undefined : line, parts ? undefined : note, extra].filter((s): s is string => Boolean(s))
   return (
-    <div className="pcard" role="dialog" aria-label={title} data-testid="play-detail-card">
+    <div ref={cardRef} className="pcard" role="dialog" aria-label={title} data-testid="play-detail-card">
       <div className="pcard-body">
         {where && <p className="pcard-where">{where}</p>}
         <div className="pcard-head">

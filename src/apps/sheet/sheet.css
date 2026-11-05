@@ -1,37 +1,15 @@
-/* Ficha (#/sheet). Solo lectura. Sin animaciones hasta effects-config.json.
-   Estilo propio, "Tormenta arcana": una página de grimorio en noche de tormenta. Los colores se redefinen solo
-   dentro de .sheet (el menú jugable sigue con los de src/index.css):
-     Nubarrón (fondo) · Nube (la página) · Hilo (líneas) · Bruma (rótulos) · Pergamino (texto)
-     Relámpago (el rayo, los modificadores, lo abierto) · Arcano (lo mágico) · Sangre (los PG).
-   Tipografía: Marcellus (nombre y títulos) + Barlow Semi Condensed (texto y números), escala fija de 1.25. */
+/* Ficha (#/sheet). Solo lectura. Sin animaciones hasta effects-config.json. Colores y tipografía: src/index.css. */
 
 .sheet {
-  --bg: #19202e;
-  --surface: #212a3d;
-  --border: #33405a;
-  --text-muted: #93a0b8;
-  --text: #ece5d3;
-  --accent: #f2c94c;
-  --arcane: #a58dff;
-  --blood: #e5484d;
-  --font-title: 'Marcellus', Georgia, serif;
-  --font-body: 'Barlow Semi Condensed', system-ui, sans-serif;
-  --fs-1: 0.8rem;
-  --fs-2: 1rem;
-  --fs-3: 1.25rem;
-  --fs-4: 1.6rem;
-  --fs-5: 2.4rem;
-
   max-width: 560px;
   margin: 0 auto;
   color: var(--text);
-  font-family: var(--font-body);
   font-size: var(--fs-2);
 }
 
-/* El fondo de toda la página mientras se ve la ficha: nubarrón con el resplandor de tormenta arriba */
+/* El fondo de toda la página mientras se ve la ficha: la hoja de acero */
 body:has(.sheet) {
-  background: radial-gradient(ellipse 90% 340px at 50% 0, #2b3654, #19202e 70%) no-repeat, #19202e;
+  background: var(--ground) fixed;
 }
 
 .muted {
@@ -239,7 +217,7 @@ body:has(.sheet) {
   margin: 8px 0 0;
 }
 
-/* --- Encabezado: lo memorable. El nombre en letra de inscripción, el rayo debajo; clase y XP a la derecha --- */
+/* --- Encabezado: lo memorable. El nombre en letra de inscripción, la hoja debajo; clase y XP a la derecha --- */
 .sheet-head {
   display: flex;
   justify-content: space-between;
@@ -260,17 +238,14 @@ body:has(.sheet) {
   overflow-wrap: anywhere;
 }
 
-/* El rayo: un zigzag de 2 px recortado con clip-path, del color del relámpago */
-.sheet-bolt {
+/* La hoja: una línea que termina en punta, recortada con clip-path, del color de la runa */
+.sheet-blade {
   display: block;
   width: min(12rem, 100%);
   height: 8px;
   margin-top: 4px;
   background: var(--accent);
-  clip-path: polygon(
-    0 70%, 8% 15%, 16% 70%, 24% 15%, 32% 70%, 40% 15%, 48% 70%, 56% 15%, 64% 70%, 72% 15%, 80% 70%, 88% 15%, 100% 55%,
-    100% 80%, 88% 40%, 80% 95%, 72% 40%, 64% 95%, 56% 40%, 48% 95%, 40% 40%, 32% 95%, 24% 40%, 16% 95%, 8% 40%, 0 95%
-  );
+  clip-path: polygon(0 40%, 92% 22%, 100% 50%, 92% 78%, 0 60%);
 }
 
 .sheet-head-meta {
@@ -334,7 +309,7 @@ body:has(.sheet) {
   padding: 0;
 }
 
-/* Abierto: una rayita al costado, amarilla (o violeta si es lo mágico), afuera del margen del texto */
+/* Abierto: una rayita al costado, afuera del margen del texto */
 .fold:has(> .fold-row[aria-expanded='true'])::before {
   content: '';
   position: absolute;

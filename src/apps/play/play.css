@@ -37,7 +37,7 @@
 }
 .hud-name {
   margin-right: auto;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
@@ -68,7 +68,21 @@ a.hud-icon {
   border: 0;
   background: none;
   text-align: left;
-  font-size: 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.hud-hp:has(.hud-hp-extra) {
+  grid-template-columns: auto auto auto 1fr;
+}
+.hud-hp-extra {
+  display: inline-flex;
+  gap: 6px;
+}
+.hud-hp-extra .temp {
+  color: var(--heal);
+}
+.hud-hp-extra .nonlethal {
+  color: var(--warn);
 }
 .hud-hp-ico {
   color: var(--hp);
@@ -113,11 +127,11 @@ a.hud-icon {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  font-size: 0.95rem;
+  font-size: 1rem;
   white-space: nowrap;
 }
 .hud-rolls small {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
@@ -154,7 +168,7 @@ a.hud-icon {
   border: 1px solid var(--accent);
   border-radius: 999px;
   color: var(--accent);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -194,6 +208,10 @@ a.hud-icon {
   line-height: var(--d1-lh);
   font-weight: 600;
 }
+.detail .d-title {
+  font-family: var(--font-title);
+  font-weight: 400;
+}
 .detail .d-info {
   flex: none;
   color: var(--accent);
@@ -222,7 +240,7 @@ a.hud-icon {
 }
 .detail .d-label {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
 }
 .detail .d-value,
@@ -236,7 +254,7 @@ a.hud-icon {
 }
 .detail .d-desc {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 .detail .clamp {
   display: -webkit-box;
@@ -258,7 +276,7 @@ a.hud-icon {
   color: var(--warn);
 }
 .detail .d-warn {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   line-height: var(--row-lh);
 }
 
@@ -270,6 +288,7 @@ a.hud-icon {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  background: var(--ground);
   touch-action: pan-y;
 }
 .listwrap {
@@ -300,7 +319,9 @@ a.hud-icon {
 }
 .crumb-tab {
   color: var(--text);
-  font-weight: 600;
+  font-family: var(--font-title);
+  font-size: 1.05rem;
+  font-weight: 400;
 }
 /* Los puntitos de las pestañas: se tocan, además de deslizar */
 .tab-dots {
@@ -333,8 +354,9 @@ a.hud-icon {
   line-height: var(--tap);
   text-align: center;
   color: var(--accent);
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 600;
+  text-shadow: var(--glow);
   pointer-events: none;
 }
 .section {
@@ -354,8 +376,9 @@ a.hud-icon {
   border: 0;
   background: none;
   text-align: left;
+  font-size: 1.05rem;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 .row.sel {
   background: var(--sel);
@@ -389,7 +412,7 @@ a.hud-icon {
 }
 .badge {
   flex: none;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
 }
 .badge.mana {
@@ -465,7 +488,9 @@ a.hud-icon {
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 1.15rem;
+  font-family: var(--font-title);
+  font-size: 1.25rem;
+  font-weight: 400;
   letter-spacing: 0.02em;
 }
 .pcard-big {
@@ -525,6 +550,63 @@ a.hud-icon {
 .pcard-text + .pcard-text {
   padding-top: 0;
   border-top: 0;
+}
+.pform {
+  display: flex;
+  flex-direction: column;
+}
+.pform-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+.pform-field.grow {
+  flex: 1;
+  min-height: 160px;
+}
+.pform-field input,
+.pform-field textarea {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pform-field textarea {
+  flex: 1;
+  resize: none;
+}
+.pform-field input:focus,
+.pform-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.pform-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px;
+}
+.pform-action {
+  flex: 1;
+  min-height: var(--tap);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.pform-action:first-child {
+  flex: 0 0 var(--tap);
 }
 .pcard-close {
   min-height: var(--tap);

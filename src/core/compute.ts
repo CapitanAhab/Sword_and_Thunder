@@ -26,6 +26,7 @@ export interface SessionContext {
   modifiers?: readonly Modifier[] // buffs, condiciones, Arcane Pool sobre el arma…
   conditions?: readonly string[] // activa los modifiers con esa `condition` (ej. 'casting-defensively')
   defensiveTrade?: number // ataque cambiado por concentración en las variantes que lo permiten (se recorta al tope)
+  loseDexToAc?: boolean // aturdido o cegado: sin bono de DES a la CA ni a la DMC (la penalización sigue)
 }
 
 export type IssueCode =
@@ -282,7 +283,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     mod('ac', 'base', 10, 'base'),
     ...(armor ? [mod('ac', 'armor', armor.armorBonus + armor.enhancement, armor.name)] : []),
     ...(shield ? [mod('ac', 'shield', shield.shieldBonus + shield.enhancement, shield.name)] : []),
-    mod('ac', 'ability', Math.min(am.dex, maxDex), 'dex'),
+    mod('ac', 'ability', Math.min(am.dex, maxDex, session.loseDexToAc ? 0 : Infinity), 'dex'),
     ...(sz.mod ? [mod('ac', 'size', sz.mod, 'size')] : []),
     ...pick('ac'),
   ]
@@ -300,7 +301,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     mod('cmd', 'base', 10, 'base'),
     mod('cmd', 'base', bab, 'bab'),
     mod('cmd', 'ability', am.str, 'str'),
-    mod('cmd', 'ability', am.dex, 'dex'),
+    mod('cmd', 'ability', Math.min(am.dex, session.loseDexToAc ? 0 : Infinity), 'dex'),
     ...specialSize('cmd'),
     ...pick('ac').filter((m) => CMD_AC_TYPES.has(m.type)).map((m): Modifier => ({ ...m, target: 'cmd' })),
     ...pick('cmd'),

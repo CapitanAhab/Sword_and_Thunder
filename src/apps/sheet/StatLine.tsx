@@ -20,8 +20,8 @@ export interface PanelStat {
 
 // El desglose en texto, sin ceros; vacío si no hay nada que desglosar (un único valor base).
 export function useParts() {
-  const { t, lang } = useT()
-  return (s: PanelStat) => statParts(t, s.stat, s.signed ?? true, (src) => localSource(lang, src))
+  const { t } = useT()
+  return (s: PanelStat) => statParts(t, s.stat, s.signed ?? true, (src) => localSource(src))
 }
 
 interface TapProps {

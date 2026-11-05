@@ -2,7 +2,7 @@ import { Fragment, useState, type ReactNode } from 'react'
 import type { ComputedSheet, FeatureLine, SpellcastingLine } from '../../core/compute'
 import type { Character } from '../../core/schema'
 import { emptySession } from '../../core/session'
-import { useT, type Lang } from '../../i18n/useT'
+import { useT } from '../../i18n/useT'
 import { alignmentLabel, damageTypeLabel, formatKg, minus, prettyCrit, slotLabel } from './labels'
 import { Description } from './SheetHeader'
 import { SkillsCard } from './PageOne'
@@ -27,9 +27,9 @@ function readOpen(): Set<string> {
 
 // Página 2, la consulta, en plegables: cada sección es una fila con un resumen y se abre al tocarla.
 // Descripción, habilidades, conjuros, dotes, rasgos, aptitudes, equipo (con la armadura arriba), dinero, idiomas y notas.
-// Todo nombre visible pasa por names.ts (en ES todo en español; los datos quedan en inglés).
+// Todo nombre visible pasa por names.ts (los datos quedan en inglés).
 export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character: Character }) {
-  const { t, lang } = useT()
+  const { t } = useT()
   const [card, setCard] = useState<SpellRef | null>(null)
   const [opened, setOpened] = useState<Set<string>>(readOpen)
   const toggle = (id: string) =>
@@ -64,17 +64,17 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
 
   const weaponLine = (w: (typeof weapons)[number]) => (
     <>
-      {localName(lang, w.id, w.name)}
+      {localName(w.id, w.name)}
       {w.enhancement ? ` +${w.enhancement}` : ''}  {w.damage} {prettyCrit(w.critical)}
       {w.damageType && ` ${damageTypeLabel(t, w.damageType)}`}
     </>
   )
   const itemLine = (i: (typeof items)[number]) => (
     <>
-      {localName(lang, i.id, i.name)}
+      {localName(i.id, i.name)}
       {qty(i.quantity)}
       {i.slot && ` (${slotLabel(t, i.slot)})`}
-      {i.notes && <small className="muted item-note">{localNote(lang, i.id, i.notes)}</small>}
+      {i.notes && <small className="muted item-note">{localNote(i.id, i.notes)}</small>}
     </>
   )
   // Carga: lo que lleva sobre el tope de la carga en la que está (ligera → tope de ligera; excedida → tope de pesada)
@@ -82,7 +82,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
   const loadCap = load ? (load.category === 'light' ? load.light : load.category === 'medium' ? load.medium : load.heavy) : 0
 
   // La tarjeta del conjuro es la de #/play; en la ficha no hay sesión (solo lectura, sin efectos).
-  const cardCtx: MenuCtx = { t, lang, sheet, session: emptySession(), character, draft: {}, showAllSkills: false }
+  const cardCtx: MenuCtx = { t, sheet, session: emptySession(), character, draft: {}, showAllSkills: false }
   const sc = sheet.spellcasting[0]
   const { available, spent } = sheet.skillRanks
   const trained = sheet.skills.filter((s) => s.ranks > 0).length
@@ -94,7 +94,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
 
   return (
     <div className="panel">
-      <Fold {...fold('description')} title={t('sheet.section.description')} summary={<Parts items={[localSource(lang, sheet.race), sheet.alignment && alignmentLabel(t, sheet.alignment)]} />}>
+      <Fold {...fold('description')} title={t('sheet.section.description')} summary={<Parts items={[localSource(sheet.race), sheet.alignment && alignmentLabel(t, sheet.alignment)]} />}>
         <Description sheet={sheet} />
       </Fold>
 
@@ -133,12 +133,12 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
       >
         <ul className="plain-list">
           {sheet.feats.map((f) => {
-            const summary = localSummary(lang, f.id)
+            const summary = localSummary(f.id)
             return (
               <li key={f.id + (f.param ?? '')}>
                 <span data-testid={`sheet-feat-${f.id}`}>
-                  {localName(lang, f.id, f.name)}
-                  {f.param && ` (${localSource(lang, f.param)})`}
+                  {localName(f.id, f.name)}
+                  {f.param && ` (${localSource(f.param)})`}
                 </span>
                 {summary && (
                   <small className="muted item-note" data-testid={`sheet-feat-${f.id}-summary`}>
@@ -155,18 +155,18 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
         <Fold {...fold('traits')} title={t('sheet.traits')} summary={String(character.traits.length)}>
           <ul className="plain-list">
             {character.traits.map((tr) => (
-              <li key={tr.name}>{localSource(lang, tr.name)}</li>
+              <li key={tr.name}>{localSource(tr.name)}</li>
             ))}
           </ul>
         </Fold>
       )}
 
       <Fold {...fold('abilities')} title={t('sheet.specialAbilities')} summary={String(featureCount)}>
-        {raceFeatures.length > 0 && <FeatureGroup head={localSource(lang, sheet.race)} features={raceFeatures} lang={lang} />}
+        {raceFeatures.length > 0 && <FeatureGroup head={localSource(sheet.race)} features={raceFeatures} />}
         {sheet.classes.map((c) => {
           const own = sheet.features.filter((f) => f.source === c.id)
           if (!own.length) return null
-          return <FeatureGroup key={c.id} head={`${localName(lang, c.id, c.name)} ${c.level}`} features={own} lang={lang} testId={`sheet-features-${c.id}`} />
+          return <FeatureGroup key={c.id} head={`${localName(c.id, c.name)} ${c.level}`} features={own} testId={`sheet-features-${c.id}`} />
         })}
       </Fold>
 
@@ -176,7 +176,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
         summary={
           load && (
             <span data-testid="sheet-load">
-              <Parts items={[`${formatKg(load.carried, lang)}/${formatKg(loadCap, lang)} ${t('sheet.kg')}`, t(`load.${load.category}`)]} />
+              <Parts items={[`${formatKg(load.carried)}/${formatKg(loadCap)} ${t('sheet.kg')}`, t(`load.${load.category}`)]} />
             </span>
           )
         }
@@ -184,14 +184,14 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
         {/* La armadura y el escudo van primero, con lo que dan y lo que cuestan */}
         {armor && (
           <p className="line">
-            {localSource(lang, armor.name)}
+            {localSource(armor.name)}
             {armor.enhancement ? ` +${armor.enhancement}` : ''}, {t(`armorCategory.${armor.category}`)}
             <small className="muted item-note">{gear(armor)}</small>
           </p>
         )}
         {shield && (
           <p className="line">
-            {localSource(lang, shield.name)}
+            {localSource(shield.name)}
             {shield.enhancement ? ` +${shield.enhancement}` : ''}
             <small className="muted item-note">{gear(shield)}</small>
           </p>
@@ -206,24 +206,24 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
           // Con pesos: un objeto por fila y su peso a la derecha (kg; los que no tienen peso, "—")
           <ul className="plain-list">
             {weapons.map((w) => (
-              <GearRow key={w.id} id={w.id} weight={w.weight} lang={lang}>
+              <GearRow key={w.id} id={w.id} weight={w.weight}>
                 {weaponLine(w)}
               </GearRow>
             ))}
             {armor && (
-              <GearRow id="armor" weight={armor.weight} lang={lang}>
-                {localSource(lang, armor.name)}
+              <GearRow id="armor" weight={armor.weight}>
+                {localSource(armor.name)}
                 {armor.enhancement ? ` +${armor.enhancement}` : ''}
               </GearRow>
             )}
             {shield && (
-              <GearRow id="shield" weight={shield.weight} lang={lang}>
-                {localSource(lang, shield.name)}
+              <GearRow id="shield" weight={shield.weight}>
+                {localSource(shield.name)}
                 {shield.enhancement ? ` +${shield.enhancement}` : ''}
               </GearRow>
             )}
             {items.map((i) => (
-              <GearRow key={i.id} id={i.id} weight={i.weight === undefined ? undefined : i.weight * i.quantity} lang={lang}>
+              <GearRow key={i.id} id={i.id} weight={i.weight === undefined ? undefined : i.weight * i.quantity}>
                 {itemLine(i)}
               </GearRow>
             ))}
@@ -238,7 +238,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
                 <li key={i.id}>{itemLine(i)}</li>
               ))}
             </ul>
-            {plain.length > 0 && <p className="line">{plain.map((i) => localName(lang, i.id, i.name) + qty(i.quantity)).join(', ')}</p>}
+            {plain.length > 0 && <p className="line">{plain.map((i) => localName(i.id, i.name) + qty(i.quantity)).join(', ')}</p>}
           </>
         )}
       </Fold>
@@ -251,7 +251,7 @@ export function PageTwo({ sheet, character }: { sheet: ComputedSheet; character:
 
       <Fold {...fold('languages')} title={t('sheet.languages')} summary={String(sheet.languages.known.length)}>
         <p className="line" data-testid="sheet-languages">
-          {sheet.languages.known.map((l) => localSource(lang, l)).join(', ')}
+          {sheet.languages.known.map((l) => localSource(l)).join(', ')}
           {sheet.languages.pending > 0 && ` (+${sheet.languages.pending} ${t('sheet.languagesPending')})`}
         </p>
       </Fold>
@@ -315,28 +315,28 @@ function Fold({ id, title, summary, open, onToggle, arcane = false, children }: 
 }
 
 // Una fila del equipo con su peso a la derecha (kg; sin peso anotado, "—").
-function GearRow({ id, weight, lang, children }: { id: string; weight: number | undefined; lang: Lang; children: ReactNode }) {
+function GearRow({ id, weight, children }: { id: string; weight: number | undefined; children: ReactNode }) {
   return (
     <li className="gear-row">
       <span>{children}</span>
       <span className="gear-weight" data-testid={`sheet-weight-${id}`}>
-        {weight ? formatKg(weight, lang) : '—'}
+        {weight ? formatKg(weight) : '—'}
       </span>
     </li>
   )
 }
 
 // Aptitudes de una raza o clase: nombre y, debajo, su línea breve.
-function FeatureGroup({ head, features, lang, testId }: { head: string; features: FeatureLine[]; lang: Lang; testId?: string }) {
+function FeatureGroup({ head, features, testId }: { head: string; features: FeatureLine[]; testId?: string }) {
   return (
     <div className="feature-group">
       <p className="line-head">{head}</p>
       <ul className="plain-list" data-testid={testId}>
         {features.map((f) => {
-          const summary = localSummary(lang, f.id)
+          const summary = localSummary(f.id)
           return (
             <li key={f.id}>
-              {localName(lang, f.id, f.name)}
+              {localName(f.id, f.name)}
               {summary && (
                 <small className="muted item-note" data-testid={`sheet-feature-${f.id}-summary`}>
                   {summary}
@@ -359,9 +359,9 @@ function Spellbook({ sc, spellbook, ctx, cantrips, onOpen }: {
   cantrips: { open: boolean; onToggle: () => void }
   onOpen: (s: SpellRef) => void
 }) {
-  const { t, lang } = useT()
+  const { t } = useT()
   const levels = [...new Set([...sc.spellsPerDay.keys(), ...Object.keys(spellbook).map(Number)])].sort((a, b) => a - b)
-  const effect = (name: string) => spellDamage(ctx, name).split(' ')[0] || spellDefs[name]?.save?.[lang].split(' ')[0] || ''
+  const effect = (name: string) => spellDamage(ctx, name).split(' ')[0] || spellDefs[name]?.save?.split(' ')[0] || ''
 
   return (
     <>
@@ -400,7 +400,7 @@ function Spellbook({ sc, spellbook, ctx, cantrips, onOpen }: {
                 {list.map((s) => (
                   <li key={s}>
                     <button type="button" className="spell-row" onClick={() => onOpen({ level: String(lv), name: s })} data-testid={`sheet-spell-${lv}-${s}`}>
-                      <span className="spell-name">{localSpell(lang, s)}</span>
+                      <span className="spell-name">{localSpell(s)}</span>
                       <span className="spell-range">{spellRangeText(ctx, s)}</span>{' '}
                       <span className="spell-effect">{effect(s)}</span>
                       <span className="muted" aria-hidden>

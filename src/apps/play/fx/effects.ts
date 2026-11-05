@@ -22,7 +22,7 @@ interface EventFx {
   vibrate: { preset: string; pattern: number[] }
 }
 
-export type FxEvent = 'cursor' | 'submenuEnter' | 'actionExecute' | 'back' | 'resourceSpend' | 'hpChange' | 'rest' | 'sheetPageChange' | 'start'
+export type FxEvent = 'cursor' | 'submenuEnter' | 'actionExecute' | 'back' | 'resourceSpend' | 'hpChange' | 'rest' | 'sheetPageChange' | 'start' | 'sheetEnter' | 'cardOpen' | 'tabChange'
 export type HpSide = 'damage' | 'heal'
 
 interface EffectsConfig {
@@ -241,6 +241,9 @@ function runAnim(ev: FxEvent, a: EventFx['animation'], ctx: FireCtx) {
       if (name === 'dim') overlay('#000', 'fx-dim', ms, ez)
       break
     case 'sheetPageChange':
+    case 'sheetEnter':
+    case 'cardOpen':
+    case 'tabChange':
     case 'start':
       transition(ctx.target, name, ctx.dir ?? 1, ms, ez)
       break

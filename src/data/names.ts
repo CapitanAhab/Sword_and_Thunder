@@ -1,7 +1,6 @@
-import type { Lang } from '../i18n/useT'
 
 // Nombres en castellano por id; los datos quedan en inglés.
-// (en ES todo en español, nombres de conjuros y dotes incluidos). Fuente de los nombres: la terminología de Devir
+// Fuente de los nombres: la terminología de Devir
 // (vía rolroyce.com, 2026-10-31); las dos dotes llevan los nombres de la 3.5 de Devir.
 export const ES_NAMES: Readonly<Record<string, string>> = {
   // Clases
@@ -46,6 +45,13 @@ export const ES_NAMES: Readonly<Record<string, string>> = {
   // Condiciones
   shaken: 'Asustado',
   sickened: 'Descompuesto',
+  frightened: 'Aterrorizado',
+  staggered: 'Tambaleante',
+  nauseated: 'Nauseado',
+  stunned: 'Aturdido',
+  blinded: 'Cegado',
+  exhausted: 'Agotado',
+  'ability-damage': 'Daño de atributo',
   fatigued: 'Fatigado',
   entangled: 'Enredado',
   grappled: 'Apresado',
@@ -132,16 +138,14 @@ export function warnMissing(kind: string, key: string): void {
   console.warn(`[i18n] sin traducción (${kind}): "${key}"`)
 }
 
-export function localSchool(lang: Lang, school: string): string {
-  if (lang !== 'es') return school
+export function localSchool(school: string): string {
   if (!ES_SCHOOLS[school]) warnMissing('escuela', school)
   return ES_SCHOOLS[school] ?? school
 }
 
-// En ES, el nombre traducido si existe; si no (o en EN), el del dato. Skills con subtipo: 'craft:alchemy' → 'Artesanía (alchemy)'.
+// El nombre traducido si existe; si no, el del dato. Skills con subtipo: 'craft:alchemy' → 'Artesanía (alchemy)'.
 // Ids con número al final ('magus-arcana-3', 'bonus-feat-5') usan el nombre del id sin número.
-export function localName(lang: Lang, id: string, fallback: string): string {
-  if (lang !== 'es') return fallback
+export function localName(id: string, fallback: string): string {
   if (ES_NAMES[id]) return ES_NAMES[id]
   const unnumbered = ES_NAMES[id.replace(/-\d+$/, '')]
   if (unnumbered) return unnumbered
@@ -182,56 +186,55 @@ const ES_SPELLS: Readonly<Record<string, string>> = {
   'Enlarge Person': 'Agrandar persona',
 }
 
-export function localSpell(lang: Lang, name: string): string {
-  if (lang !== 'es') return name
+export function localSpell(name: string): string {
   if (!ES_SPELLS[name]) warnMissing('conjuro', name)
   return ES_SPELLS[name] ?? name
 }
 
 // Nombre de un buff activo: el efecto que deja un objeto (por id) o, si no, el conjuro (por nombre).
-const ITEM_BUFFS: Readonly<Record<string, { es: string; en: string }>> = {
-  'potion-invisibility': { es: 'Invisible', en: 'Invisible' },
+const ITEM_BUFFS: Readonly<Record<string, string>> = {
+  'potion-invisibility': 'Invisible',
 }
-export const localBuff = (lang: Lang, id: string): string => ITEM_BUFFS[id]?.[lang] ?? localSpell(lang, id)
+export const localBuff = (id: string): string => ITEM_BUFFS[id] ?? localSpell(id)
 
 // Una línea propia y breve por dote o aptitud (no es el texto del libro: OGL / Community Use). Por id; los ids
 // con número usan el id sin número.
-const SUMMARIES: Readonly<Record<string, { es: string; en: string }>> = {
+const SUMMARIES: Readonly<Record<string, string>> = {
   // Dotes
-  'combat-casting': { es: '+4 a concentración al lanzar a la defensiva o apresado', en: '+4 on concentration when casting defensively or grappled' },
-  'improved-initiative': { es: '+4 a la iniciativa', en: '+4 on initiative' },
+  'combat-casting': '+4 a concentración al lanzar a la defensiva o apresado',
+  'improved-initiative': '+4 a la iniciativa',
   // Raza
-  'bonus-feat': { es: 'Una dote extra', en: 'One extra feat' },
-  skilled: { es: '+1 rango de habilidad por nivel', en: '+1 skill rank per level' },
+  'bonus-feat': 'Una dote extra',
+  skilled: '+1 rango de habilidad por nivel',
   // Magus
-  'weapon-armor-proficiency': { es: 'Armas sencillas y marciales, armadura ligera', en: 'Simple and martial weapons, light armor' },
-  'magus-spells': { es: 'Arcanos, de INT, se preparan del libro', en: 'Arcane, INT-based, prepared from a spellbook' },
-  'arcane-pool': { es: 'Puntos para mejorar el arma y potenciar sus aptitudes', en: 'Points to enhance your weapon and fuel class abilities' },
-  cantrips: { es: 'Trucos preparados, se lanzan a voluntad', en: 'Prepared cantrips, cast at will' },
-  'spell-combat': { es: 'Atacar con el arma y lanzar un conjuro en la misma ronda (−2 al ataque)', en: 'Attack with your weapon and cast a spell in the same round (−2 to attack)' },
-  spellstrike: { es: 'El conjuro de toque se descarga con el golpe del arma', en: 'Deliver touch spells through a weapon hit' },
-  'magus-arcana': { es: 'Una aptitud especial a elección', en: 'A special ability of your choice' },
-  'spell-recall': { es: 'Recuperar un conjuro lanzado gastando reserva', en: 'Regain a cast spell by spending pool points' },
-  'knowledge-pool': { es: 'Preparar un conjuro que no está en el libro gastando reserva', en: 'Prepare a spell not in your book by spending pool points' },
-  'medium-armor': { es: 'Lanza conjuros con armadura intermedia sin fallo arcano', en: 'Cast in medium armor without arcane spell failure' },
-  'improved-spell-combat': { es: 'Combate con conjuros: +2 a concentración', en: 'Spell combat: +2 on concentration' },
-  'fighter-training': { es: 'Cuenta como guerrero para requisitos de dotes', en: 'Counts as a fighter for feat prerequisites' },
-  'improved-spell-recall': { es: 'Recordar conjuros cuesta menos', en: 'Spell recall costs less' },
-  'heavy-armor': { es: 'Lanza conjuros con armadura pesada sin fallo arcano', en: 'Cast in heavy armor without arcane spell failure' },
-  'greater-spell-combat': { es: 'Combate con conjuros: +4 a concentración', en: 'Spell combat: +4 on concentration' },
-  counterstrike: { es: 'Ataque de oportunidad contra quien lanza cerca', en: 'Attack of opportunity against nearby casters' },
-  'greater-spell-access': { es: 'Suma conjuros de la lista de mago', en: 'Adds spells from the wizard list' },
-  'true-magus': { es: 'Culminación de la clase', en: 'Capstone of the class' },
+  'weapon-armor-proficiency': 'Armas sencillas y marciales, armadura ligera',
+  'magus-spells': 'Arcanos, de INT, se preparan del libro',
+  'arcane-pool': 'Puntos para mejorar el arma y potenciar sus aptitudes',
+  cantrips: 'Trucos preparados, se lanzan a voluntad',
+  'spell-combat': 'Atacar con el arma y lanzar un conjuro en la misma ronda (−2 al ataque)',
+  spellstrike: 'El conjuro de toque se descarga con el golpe del arma',
+  'magus-arcana': 'Una aptitud especial a elección',
+  'spell-recall': 'Recuperar un conjuro lanzado gastando reserva',
+  'knowledge-pool': 'Preparar un conjuro que no está en el libro gastando reserva',
+  'medium-armor': 'Lanza conjuros con armadura intermedia sin fallo arcano',
+  'improved-spell-combat': 'Combate con conjuros: +2 a concentración',
+  'fighter-training': 'Cuenta como guerrero para requisitos de dotes',
+  'improved-spell-recall': 'Recordar conjuros cuesta menos',
+  'heavy-armor': 'Lanza conjuros con armadura pesada sin fallo arcano',
+  'greater-spell-combat': 'Combate con conjuros: +4 a concentración',
+  counterstrike: 'Ataque de oportunidad contra quien lanza cerca',
+  'greater-spell-access': 'Suma conjuros de la lista de mago',
+  'true-magus': 'Culminación de la clase',
 }
 
-export function localSummary(lang: Lang, id: string): string | undefined {
+export function localSummary(id: string): string | undefined {
   const s = SUMMARIES[id] ?? SUMMARIES[id.replace(/-\d+$/, '')]
-  return s?.[lang]
+  return s
 }
 
 // Fuente del desglose que no es un id (nombre de ítem o dote): 'Chain shirt' → id 'chain-shirt'.
-export const localSource = (lang: Lang, source: string): string =>
-  localName(lang, source.toLowerCase().replace(/\s+/g, '-'), source)
+export const localSource = (source: string): string =>
+  localName(source.toLowerCase().replace(/\s+/g, '-'), source)
 
 // Notas del equipo (el JSON las tiene en inglés).
 const ES_NOTES: Readonly<Record<string, string>> = {
@@ -240,8 +243,7 @@ const ES_NOTES: Readonly<Record<string, string>> = {
   'potion-invisibility': 'Invisible 3 minutos; se corta al atacar',
 }
 
-export function localNote(lang: Lang, id: string, fallback: string | undefined): string | undefined {
-  if (lang !== 'es') return fallback
+export function localNote(id: string, fallback: string | undefined): string | undefined {
   if (!ES_NOTES[id] && fallback) warnMissing('nota', id)
   return ES_NOTES[id] ?? fallback
 }

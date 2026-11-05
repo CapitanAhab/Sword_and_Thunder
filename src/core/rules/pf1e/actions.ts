@@ -1,4 +1,5 @@
 import type { ModifierInput } from '../../schema'
+import { SKILLS } from './skills'
 
 // Acciones básicas de combate y condiciones que modifican stats (CRB, cap. 8 y apéndice 2).
 // La sesión las convierte en modifiers; las vistas nunca suman estos valores por su cuenta.
@@ -68,6 +69,23 @@ export const CONDITIONS = {
   ],
   // Tumbado: −4 al ataque cuerpo a cuerpo. La CA cambia según quién ataca (PRONE_AC), así que no va como modifier.
   prone: [{ target: 'attack.melee', type: 'untyped', value: -4 }],
+  frightened: [
+    { target: 'attack', type: 'untyped', value: -2 },
+    { target: 'saves', type: 'untyped', value: -2 },
+    { target: 'skills', type: 'untyped', value: -2 },
+  ],
+  // Limitan las acciones: ver actionLimit y NO_ACTIONS.
+  staggered: [],
+  nauseated: [],
+  stunned: [{ target: 'ac', type: 'untyped', value: -2 }],
+  blinded: [
+    { target: 'ac', type: 'untyped', value: -2 },
+    ...SKILLS.filter((s) => s.ability === 'str' || s.ability === 'dex').map((s): ModifierInput => ({ target: `skill.${s.id}`, type: 'untyped', value: -4 })),
+  ],
+  exhausted: [
+    { target: 'ability.str', type: 'untyped', value: -6 },
+    { target: 'ability.dex', type: 'untyped', value: -6 },
+  ],
 } satisfies Record<string, ModifierInput[]>
 export type ConditionId = keyof typeof CONDITIONS
 
@@ -100,5 +118,12 @@ export type FreeField = keyof typeof FREE_TARGETS
 
 // Condiciones que cambian el movimiento: enredado se mueve a la mitad y no puede cargar; apresado no se mueve;
 // tumbado tiene que levantarse primero.
-export const HALF_SPEED: readonly ConditionId[] = ['entangled']
-export const NO_CHARGE: readonly ConditionId[] = ['grappled', 'entangled', 'prone']
+export const HALF_SPEED: readonly ConditionId[] = ['entangled', 'exhausted', 'blinded']
+export const NO_CHARGE: readonly ConditionId[] = ['grappled', 'entangled', 'prone', 'fatigued', 'exhausted', 'blinded']
+
+// Sin acciones en el turno: aturdido no actúa; nauseado solo puede moverse, y moverse no pasa por el menú.
+export const NO_ACTIONS: readonly ConditionId[] = ['stunned', 'nauseated']
+// Pierden el bono de DES a la CA.
+export const LOSE_DEX_AC: readonly ConditionId[] = ['stunned', 'blinded']
+// La más grave reemplaza a la leve: sus penalizadores no se suman.
+export const REPLACES: Partial<Record<ConditionId, ConditionId>> = { frightened: 'shaken', exhausted: 'fatigued' }

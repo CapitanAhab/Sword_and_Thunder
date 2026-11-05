@@ -2,7 +2,6 @@ import { es, type MessageKey } from '../../i18n/es'
 import { ABILITIES, type Ability } from '../../core/schema'
 import { signed, type Modifier, type Stat } from '../../core/modifiers'
 import type { Issue } from '../../core/compute'
-import type { Lang } from '../../i18n/useT'
 import { warnMissing } from '../../data/names'
 
 // Ids internos de core/ → texto de la UI. Solo traduce y formatea: no calcula nada.
@@ -113,9 +112,9 @@ export const prettyCrit = (crit: string) => crit.replace(/x(\d)/, '×$1')
 export const formatValue = (n: number, isSigned: boolean) => minus(isSigned ? signed(n) : String(n))
 
 // Miles a mano (Intl en 'es' no separa los de 4 cifras): 3000 → "3.000" / "3,000"
-export const formatInt = (n: number, lang: Lang) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, lang === 'es' ? '.' : ',')
+export const formatInt = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 // Peso en kg: hasta 2 decimales, sin ceros de más (24,75 · 12,5 · 2); coma decimal en ES.
-export const formatKg = (n: number, lang: Lang) => {
+export const formatKg = (n: number) => {
   const s = String(Math.round(n * 100) / 100)
-  return lang === 'es' ? s.replace('.', ',') : s
+  return s.replace('.', ',')
 }

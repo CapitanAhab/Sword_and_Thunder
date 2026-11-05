@@ -18,7 +18,7 @@ const HOLD_MS = 400
 const HEAL_WAIT_MS = 10000
 
 export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healRequest?: number }) {
-  const { t, lang, toggleLang } = useT()
+  const { t } = useT()
   const { sheet, session, update } = useSession()
   const [muted, setMutedState] = useState(isMuted)
   const [pending, setPending] = useState<number | null>(null) // null = no se está editando
@@ -90,10 +90,10 @@ export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healReque
     ...(session.charging ? [{ id: 'charged', text: t('play.chip.charged') }] : []),
     ...(session.readied ? [{ id: 'readied', text: t('play.chip.readied') }] : []),
     ...(session.enhancement ? [{ id: 'enhancement', text: `${t('play.chip.weapon')} +${session.enhancement.bonus}${rounds(session.enhancement.rounds)}` }] : []),
-    ...session.conditions.map((c) => ({ id: c, text: localName(lang, c, c.charAt(0).toUpperCase() + c.slice(1)) })),
-    ...session.buffs.map((b) => ({ id: `buff-${b}`, text: `${localBuff(lang, b)}${rounds(session.buffRounds[b])}` })),
+    ...session.conditions.map((c) => ({ id: c, text: localName(c, c.charAt(0).toUpperCase() + c.slice(1)) })),
+    ...session.buffs.map((b) => ({ id: `buff-${b}`, text: `${localBuff(b)}${rounds(session.buffRounds[b])}` })),
     ...session.external.map((e) => ({ id: `ext-${e.id}`, text: `${externalLabel(t, e)}${rounds(e.rounds)}` })),
-    ...(session.held ? [{ id: 'held', text: `${t('play.chip.held')}: ${localSpell(lang, session.held.name)}${session.held.charges > 1 ? ` ×${session.held.charges}` : ''}` }] : []),
+    ...(session.held ? [{ id: 'held', text: `${t('play.chip.held')}: ${localSpell(session.held.name)}${session.held.charges > 1 ? ` ×${session.held.charges}` : ''}` }] : []),
     ...(session.castDefensively ? [{ id: 'defensive', text: t('play.chip.defensive') }] : []),
   ]
   const combat = session.combat
@@ -121,16 +121,13 @@ export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healReque
           </>
         ) : (
           <span className="hud-name">
-            {sheet.name} · {sheet.classes.map((c) => `${localName(lang, c.id, c.name)} ${c.level}`).join(' / ')}
+            {sheet.name} · {sheet.classes.map((c) => `${localName(c.id, c.name)} ${c.level}`).join(' / ')}
           </span>
         )}
         {/* Si había un cambio de PG sin aplicar (antes de 1,5 s), se aplica antes de salir para no perderlo */}
         <a className="hud-icon" href={href('sheet')} onClick={() => pending !== null && commit()} aria-label={t('nav.sheet')} data-testid="hud-sheet">
           📄
         </a>
-        <button type="button" className="hud-icon" onClick={toggleLang} data-testid="hud-lang">
-          {t('lang.toggle')}
-        </button>
         <button type="button" className="hud-icon" onClick={toggleMute} aria-pressed={muted} aria-label={t('play.mute')} data-testid="hud-mute">
           {muted ? '🔇' : '🔊'}
         </button>
@@ -142,6 +139,12 @@ export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healReque
           <span data-testid="hud-hp">
             {minus(String(hp))}/{sheet.hp.total}
           </span>
+          {(session.tempHp > 0 || session.nonlethal > 0) && (
+            <span className="hud-hp-extra">
+              {session.tempHp > 0 && <span className="temp" data-testid="hud-temp-hp">+{session.tempHp}</span>}
+              {session.nonlethal > 0 && <span className="nonlethal" data-testid="hud-nonlethal">▲{session.nonlethal}</span>}
+            </span>
+          )}
           <span className="hud-bar">
             <i style={{ width: `${pct}%`, transition: `width ${hpBarMs(side)}ms ease-out` }} />
           </span>

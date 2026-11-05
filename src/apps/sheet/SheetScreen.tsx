@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type TouchEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type TouchEvent } from 'react'
 import { useT } from '../../i18n/useT'
 import type { MessageKey } from '../../i18n/es'
 import type { ParseError } from '../../core/schema'
@@ -10,16 +10,11 @@ import { PageTwo } from './PageTwo'
 import { fire } from '../play/fx/effects'
 // Tipografías de la ficha, empaquetadas (andan offline): Marcellus para el nombre y los títulos,
 // Barlow Semi Condensed para el texto y los números. Solo los pesos que se usan, alfabeto latino.
-import '@fontsource/marcellus/latin-400.css'
-import '@fontsource/barlow-semi-condensed/latin-400.css'
-import '@fontsource/barlow-semi-condensed/latin-600.css'
-import '@fontsource/barlow-semi-condensed/latin-700.css'
 import './sheet.css'
 
 // Ficha de solo lectura en 2 páginas, como la oficial. Lo único que se toca es el cambio de página.
 const PAGES = [1, 2] as const
 type Page = (typeof PAGES)[number]
-const PAGE_KEY = 'sat.sheet.page'
 
 // Un error del JSON en el idioma activo: "abilities.str: tiene que ser un número (hay un texto)".
 const TYPE_KEYS: Record<string, MessageKey> = {
@@ -38,23 +33,20 @@ function parseErrorText(t: (key: MessageKey) => string, e: ParseError): string {
 }
 const SWIPE_PX = 60
 
-function readStoredPage(): Page {
-  try {
-    return localStorage.getItem(PAGE_KEY) === '2' ? 2 : 1
-  } catch {
-    return 1
-  }
-}
-
 export function SheetScreen() {
-  const { t, toggleLang } = useT()
+  const { t } = useT()
   const state = useCharacter()
-  const [page, setPage] = useState<Page>(readStoredPage)
+  const [page, setPage] = useState<Page>(1)
   const touch = useRef<{ x: number; y: number } | null>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   const shownPage = useRef(page)
+  const rootRef = useRef<HTMLElement>(null)
 
-  // sheetPageChange (effects-config.json): boot 8-bit al cambiar de página, no al entrar
+  useLayoutEffect(() => {
+    fire('sheetEnter', { target: rootRef.current })
+  }, [])
+
+  // sheetPageChange (effects-config.json): boot 8-bit al cambiar de página
   useEffect(() => {
     if (shownPage.current === page) return
     fire('sheetPageChange', { target: pageRef.current, dir: page > shownPage.current ? 1 : -1 })
@@ -80,9 +72,6 @@ export function SheetScreen() {
       <a className="page-btn page-link" href={href('play')} data-testid="sheet-play">
         ▶ {t('nav.play')}
       </a>
-      <button type="button" className="page-btn page-link" onClick={toggleLang} data-testid="lang-toggle">
-        {t('lang.toggle')}
-      </button>
     </nav>
   )
 
@@ -108,11 +97,6 @@ export function SheetScreen() {
   const selectPage = (next: Page) => {
     setPage(next)
     window.scrollTo(0, 0)
-    try {
-      localStorage.setItem(PAGE_KEY, String(next))
-    } catch {
-      // sin storage: la página no se recuerda
-    }
   }
 
   // Swipe horizontal: ← página 2, → página 1. Si el gesto es más vertical que horizontal, es scroll.
@@ -128,7 +112,7 @@ export function SheetScreen() {
   }
 
   return (
-    <section className="sheet">
+    <section className="sheet" ref={rootRef}>
       {nav(selectPage)}
       <IssuesBanner sheet={sheet} />
       <div

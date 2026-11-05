@@ -1,26 +1,38 @@
-/* Tokens base de color. */
+/* Tema de toda la app, "Filo y conjuro": acero frío con una runa violeta encendida sobre la hoja.
+   Tipografía: Marcellus (nombre y títulos) + Barlow Semi Condensed (texto y números), escala fija de 1.25. */
 :root {
-  --bg: #0e0f13;
-  --surface: #181a21;
-  --text: #e8e6e1;
-  --text-muted: #8b8d96;
-  --accent: #6aa9ff;
-  --border: #2a2d36;
-  --warn: #e0b04a;
+  --bg: #1b2228;
+  --surface: #252e35;
+  --text: #e6edee;
+  --text-muted: #9dacb3;
+  --accent: #c3b1ff;
+  --arcane: #c3b1ff;
+  --blood: #e7696c;
+  --border: #3f4c55;
+  --warn: #f0c060;
   --backdrop: rgb(0 0 0 / 0.6);
   /* HUD de #/play */
-  --hp: #e5484d;
-  --heal: #4cc38a;
-  --gold: #f5c451;
-  --mana: #a597ff;
-  --sel: rgba(106, 169, 255, 0.12);
-  --sel-strong: rgba(106, 169, 255, 0.45);
+  --hp: #e7696c;
+  --heal: #6fcfa8;
+  --gold: #e0cb8f;
+  --mana: #c3b1ff;
+  --sel: rgba(195, 177, 255, 0.13);
+  --sel-strong: rgba(195, 177, 255, 0.45);
+  --glow: 0 0 10px rgba(195, 177, 255, 0.85); /* el brillo de la runa */
+  --ground: linear-gradient(160deg, #2a343c, #1b2228 45%, #20282f); /* la hoja de acero, de fondo */
+  --font-title: 'Marcellus', Georgia, serif;
+  --font-body: 'Barlow Semi Condensed', system-ui, sans-serif;
+  --fs-1: 0.8rem;
+  --fs-2: 1rem;
+  --fs-3: 1.25rem;
+  --fs-4: 1.6rem;
+  --fs-5: 2.4rem;
   --radius: 10px;
   --tap: 48px; /* target táctil mínimo */
   --gutter: 16px;
 
   color-scheme: dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-body);
 }
 
 *,

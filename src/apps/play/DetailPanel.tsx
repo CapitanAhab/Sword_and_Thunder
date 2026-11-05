@@ -10,7 +10,7 @@ import type { MenuItem } from './menus'
 // tocar la franja abre la tarjeta (la del conjuro, o DetailCard con el texto completo).
 export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: () => void }) {
   const testId = 'play-detail'
-  const { t, lang } = useT()
+  const { t } = useT()
   const ref = useRef<HTMLElement | null>(null)
   const [overflow, setOverflow] = useState(false)
   const { title, tag, stats, line, note, extra, warn } = item.detail
@@ -18,7 +18,7 @@ export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: 
   // Sin columnas: `line` usa un renglón si hay descripción debajo, si no, los dos (y al revés)
   const first = stats ? null : line
   const tappable = Boolean(item.spell) || overflow
-  const key = `${lang}|${JSON.stringify(item.detail)}`
+  const key = JSON.stringify(item.detail)
 
   useLayoutEffect(() => {
     const el = ref.current

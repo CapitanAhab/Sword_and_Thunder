@@ -9,25 +9,25 @@ import { Block, OpenParts, type PanelStat } from './StatLine'
 // columnas. Un atributo con desglose (no solo la base) se toca y el desglose aparece debajo.
 // La descripción (raza, alineamiento, datos personales, XP para el próximo nivel) va en la página 2.
 export function SheetHeader({ sheet, open, onToggle }: { sheet: ComputedSheet; open: string | null; onToggle: (id: string) => void }) {
-  const { t, lang } = useT()
-  const classes = sheet.classes.map((c) => `${localName(lang, c.id, c.name)} ${c.level}`).join(' / ')
+  const { t } = useT()
+  const classes = sheet.classes.map((c) => `${localName(c.id, c.name)} ${c.level}`).join(' / ')
   const items: PanelStat[] = ABILITIES.map((a) => ({ testId: `sheet-ability-${a}`, label: t(`ability.${a}`), stat: sheet.abilities[a].score, signed: false }))
 
   return (
     <Block>
-      {/* El encabezado es lo memorable de la ficha: el nombre en letra de inscripción, el rayo debajo y un
-          resplandor de tormenta detrás (sheet.css). Clase y XP a la derecha, en dos renglones. */}
+      {/* El encabezado es lo memorable de la ficha: el nombre en letra de inscripción y la hoja debajo
+          (sheet.css). Clase y XP a la derecha, en dos renglones. */}
       <header className="sheet-head">
         <div className="sheet-head-name">
           <h1 data-testid="sheet-name">{sheet.name}</h1>
-          <span className="sheet-bolt" aria-hidden />
+          <span className="sheet-blade" aria-hidden />
         </div>
         <p className="sheet-head-meta">
           <span data-testid="sheet-level">{classes}</span>
           <span>
             {t('sheet.xp')}{' '}
             <span className="header-xp" data-testid="sheet-xp">
-              {formatInt(sheet.xp.current, lang)}
+              {formatInt(sheet.xp.current)}
             </span>
           </span>
         </p>
@@ -35,7 +35,7 @@ export function SheetHeader({ sheet, open, onToggle }: { sheet: ComputedSheet; o
       <div className="abilities">
         {ABILITIES.map((a) => {
           const { score, mod } = sheet.abilities[a]
-          const tappable = Boolean(statParts(t, score, false, (s) => localSource(lang, s)))
+          const tappable = Boolean(statParts(t, score, false, (s) => localSource(s)))
           const id = `sheet-ability-${a}`
           const inner = (
             <>
@@ -67,7 +67,7 @@ export function SheetHeader({ sheet, open, onToggle }: { sheet: ComputedSheet; o
 // Descripción (página 2, dentro de su plegable): raza, alineamiento y tamaño; los datos personales que haya; y la XP
 // con el próximo nivel.
 export function Description({ sheet }: { sheet: ComputedSheet }) {
-  const { t, lang } = useT()
+  const { t } = useT()
   const { current, next } = sheet.xp
   // Datos personales: solo los que están. Sexo, altura y peso van sin rótulo ("1,80 m" se entiende solo).
   const bio = BIO_FIELDS.flatMap((f) => {
@@ -79,7 +79,7 @@ export function Description({ sheet }: { sheet: ComputedSheet }) {
   return (
     <>
       <p className="line" data-testid="sheet-summary">
-        {[localSource(lang, sheet.race), sheet.alignment && alignmentLabel(t, sheet.alignment), t(`size.${sheet.size}`)].filter(Boolean).join(' · ')}
+        {[localSource(sheet.race), sheet.alignment && alignmentLabel(t, sheet.alignment), t(`size.${sheet.size}`)].filter(Boolean).join(' · ')}
       </p>
       {bio && (
         <p className="line" data-testid="sheet-bio">
@@ -89,8 +89,8 @@ export function Description({ sheet }: { sheet: ComputedSheet }) {
       <p className="line">
         {t('sheet.xp')}{' '}
         <span data-testid="sheet-xp-next">
-          {formatInt(current, lang)}
-          {next !== null && ` / ${formatInt(next, lang)}`}
+          {formatInt(current)}
+          {next !== null && ` / ${formatInt(next)}`}
         </span>
       </p>
     </>

@@ -4,7 +4,7 @@ Ficha de personaje de **Pathfinder 1e** con cálculos automáticos y un **menú 
 
 **Usarla:** https://capitanahab.github.io/Sword_and_Thunder/
 
-*English: a Pathfinder 1e character sheet and mobile, game-style play menu. Bilingual UI (ES/EN toggle).*
+*English: a Pathfinder 1e character sheet and mobile, game-style play menu. UI in Spanish.*
 
 ## Qué tiene
 

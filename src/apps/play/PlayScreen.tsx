@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState, type TouchEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type TouchEvent } from 'react'
 import { useT } from '../../i18n/useT'
 import { href } from '../../router'
-import { useCharacter } from '../../state/CharacterContext'
+import { useCharacter, useNotebook } from '../../state/CharacterContext'
 import { SessionProvider, useSession } from '../../state/SessionContext'
 import {
   addFreeEffect, adjustPrepared, afterAction, clearUndo, emptyFreeDraft, hpState, nextTurn, prepare, recordAction, rest, sameUndo, setSpellCombatTrade, timesCast,
-  trackUndo, undoLast,
+  itemsLeft, setValue, trackUndo, undoLast, valueOf,
+  type ValueKind,
   type FreeDraft, type Session, type SessionFix, type SpellCounts,
 } from '../../core/session'
 import { localName, localSpell } from '../../data/names'
 import { endsOnAttack } from '../../data/items'
-import type { Lang } from '../../i18n/useT'
 import type { Translate } from '../sheet/labels'
 import { buildMenu, type After, type MenuCtx, type MenuItem } from './menus'
 import { eventFx, fire, registerLayer, unlockAudio } from './fx/effects'
@@ -20,6 +20,8 @@ import { CursorList } from './CursorList'
 import { ActionBar } from './ActionBar'
 import { SpellCard } from './SpellCard'
 import { DetailCard } from './DetailCard'
+import { FormCard, type FormSpec } from './FormCard'
+import { stockDelta } from './notebookMenus'
 import './play.css'
 
 // Menú jugable (#/play): HUD → detalle → lista con cursor → barra del pulgar. Lee la ficha + la sesión.
@@ -45,21 +47,21 @@ export function PlayScreen() {
 }
 
 // Una línea del aviso de "Tocá para empezar" cuando la sesión guardada se ajustó al personaje
-function fixText(t: Translate, lang: Lang, fix: SessionFix): string {
+function fixText(t: Translate, fix: SessionFix): string {
   const fill = (key: Parameters<Translate>[0], vars: Record<string, string | number>) =>
     Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), t(key))
   switch (fix.kind) {
     case 'spell-removed':
-      return fill('play.fix.spell', { name: localSpell(lang, fix.name) })
+      return fill('play.fix.spell', { name: localSpell(fix.name) })
     case 'prepared-trimmed':
       return fill('play.fix.trimmed', { level: fix.level, max: fix.max })
     case 'resource-capped':
-      return fill('play.fix.resource', { name: localName(lang, fix.id, fix.name), from: fix.from, to: fix.to })
+      return fill('play.fix.resource', { name: localName(fix.id, fix.name), from: fix.from, to: fix.to })
     case 'resource-removed':
     case 'item-removed':
-      return fill('play.fix.gone', { name: localName(lang, fix.id, fix.id) })
+      return fill('play.fix.gone', { name: localName(fix.id, fix.id) })
     case 'item-capped':
-      return fill('play.fix.itemCapped', { name: localName(lang, fix.id, fix.name), to: fix.to })
+      return fill('play.fix.itemCapped', { name: localName(fix.id, fix.name), to: fix.to })
     case 'enhancement-off':
       return t('play.fix.enhancement')
     case 'field-dropped':
@@ -93,8 +95,10 @@ const resume: { started: boolean; stack: Frame[]; draft: SpellCounts; showAllSki
 }
 
 function PlayApp() {
-  const { t, lang } = useT()
+  const { t } = useT()
   const { character, session, sheet, update, fixes } = useSession()
+  const { base, notebook, update: updateBook } = useNotebook()
+  const [form, setForm] = useState<FormSpec | null>(null)
   const [started, setStarted] = useState(resume.started)
   const [stack, setStack] = useState<Frame[]>(resume.stack)
   const [draft, setDraft] = useState<SpellCounts>(resume.draft)
@@ -106,13 +110,18 @@ function PlayApp() {
   const [card, setCard] = useState<{ spell: { level: string; name: string } } | { detail: MenuItem['detail'] } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  // Volver de la ficha: misma transición que al entrar a ella. Al abrir la app no corre (todavía no se empezó).
+  useLayoutEffect(() => {
+    if (started) fire('sheetEnter', { target: rootRef.current })
+  }, [])
   const touch = useRef<{ x: number; y: number } | null>(null)
 
   // Borrador del modificador Libre (Estado › Efecto de otro › Libre…)
   const [free, setFree] = useState<FreeDraft>(emptyFreeDraft)
   // Cada poción de curar suma 1: el HUD abre el editor de PG para sumar la cura
   const [healRequest, setHealRequest] = useState(0)
-  const ctx: MenuCtx = { t, lang, sheet, session, character, draft, showAllSkills, free }
+  const book = base ? { base, notebook, update: updateBook, setSession: (s: Session) => update(() => s) } : undefined
+  const ctx: MenuCtx = { t, sheet, session, character, draft, showAllSkills, free, ...(book ? { book } : {}) }
   const frame = stack[stack.length - 1] ?? { menu: 'root', sel: 0, label: '' }
   // Si te morís, te morís: la pantalla de muerte reemplaza al menú hasta Me equivoqué o Revivir (también al recargar).
   const dead = hpState(sheet, session) === 'dead'
@@ -125,7 +134,15 @@ function PlayApp() {
   // Y el de Ataque por Conc (Combate con conjuros a la defensiva): cambia la sesión en vivo; ✕ vuelve al valor de antes
   const editingTrade = !dead && frame.menu.startsWith('trade:')
   const tradeBefore = useRef(0)
-  const editing = preparing || editingFree || editingTrade
+  // Y el de PG temporales, no letal y daño de atributo: igual, en vivo; ✕ vuelve al valor de antes
+  const editingValue = !dead && frame.menu.startsWith('value:')
+  const valueKind = frame.menu.slice('value:'.length) as ValueKind
+  const valueBefore = useRef(0)
+  // Y el de la cantidad de un objeto: cambia la libreta en vivo; ✕ vuelve a la de antes
+  const editingQty = !dead && frame.menu.startsWith('qty:')
+  const qtyId = frame.menu.slice('qty:'.length)
+  const qtyBefore = useRef(notebook)
+  const editing = preparing || editingFree || editingTrade || editingValue || editingQty
 
   const rowEl = (i: number) => listRef.current?.querySelectorAll<HTMLElement>('.row')[i]
   const setSel = (i: number) => setStack((s) => [...s.slice(0, -1), { ...frame, sel: i }])
@@ -140,6 +157,11 @@ function PlayApp() {
   }
 
   const back = () => {
+    if (form) {
+      setForm(null)
+      fire('back', { noAnim: true })
+      return
+    }
     // La tarjeta se cierra siempre, también en la pantalla de muerte (si no, no habría forma de salir)
     if (card) {
       setCard(null)
@@ -149,6 +171,8 @@ function PlayApp() {
     if (dead) return
     if (stack.length === 1) return
     if (editingTrade) update((s) => setSpellCombatTrade(sheet, s, tradeBefore.current))
+    if (editingValue) update((s) => setValue(s, valueKind, valueBefore.current))
+    if (editingQty) updateBook(() => qtyBefore.current)
     setStack((s) => s.slice(0, -1))
     fire('back', { target: listRef.current })
   }
@@ -164,6 +188,16 @@ function PlayApp() {
     }
     if (editingTrade) {
       update((s) => setSpellCombatTrade(sheet, s, s.spellCombatTrade + d))
+      fire('cursor', { noAnim: true })
+      return
+    }
+    if (editingValue) {
+      update((s) => setValue(s, valueKind, valueOf(s, valueKind) + d))
+      fire('cursor', { noAnim: true })
+      return
+    }
+    if (editingQty) {
+      if (d > 0 || itemsLeft(character, session, qtyId) > 0) updateBook((nb) => stockDelta(nb, character, qtyId, d))
       fire('cursor', { noAnim: true })
       return
     }
@@ -238,6 +272,8 @@ function PlayApp() {
         if (a.menu === 'prepare') setDraft(session.prepared)
         if (a.menu === 'effect-free') setFree(emptyFreeDraft())
         if (a.menu.startsWith('trade:')) tradeBefore.current = session.spellCombatTrade
+        if (a.menu.startsWith('value:')) valueBefore.current = valueOf(session, a.menu.slice('value:'.length) as ValueKind)
+        if (a.menu.startsWith('qty:')) qtyBefore.current = notebook
         push(a.menu, it.label)
         fire('submenuEnter', { target: listRef.current })
         break
@@ -294,6 +330,22 @@ function PlayApp() {
         setShowAllSkills((v) => !v)
         fire('submenuEnter', { target: listRef.current })
         break
+      case 'book': // la libreta: como los ON/OFF, no navega y no se deshace (se vuelve a tocar)
+        if (it.hold) ghostClick.current = true
+        updateBook(a.update)
+        fire(a.on ? 'actionExecute' : 'back', { noAnim: true })
+        if (a.back) setStack((s) => s.slice(0, -1))
+        break
+      case 'form':
+        setForm(a.form)
+        fire('submenuEnter', { noAnim: true })
+        if (a.copy) {
+          navigator.clipboard?.writeText(a.copy).then(
+            () => setForm((f) => (f ? { ...f, note: t('play.backupCopied') } : f)),
+            () => {}, // sin permiso o fuera de HTTPS: el texto queda a la vista para copiarlo a mano
+          )
+        }
+        break
       case 'none': // fila de solo lectura: el 2do toque abre la tarjeta con todo (las bloqueadas no hacen nada)
         if (it.nav === 'info') openCard(it)
         break
@@ -315,6 +367,11 @@ function PlayApp() {
       // LISTO de Ataque por Conc: el valor ya quedó en la sesión; vuelve a la lista de conjuros (no es una acción).
       // Como los ON/OFF, no se deshace.
       update(track((s) => s, t('play.trade')))
+      fire('submenuEnter', { noAnim: true })
+      setStack((s) => s.slice(0, -1))
+      return
+    }
+    if (editingValue || editingQty) {
       fire('submenuEnter', { noAnim: true })
       setStack((s) => s.slice(0, -1))
       return
@@ -381,11 +438,14 @@ function PlayApp() {
   const goTab = (menu: 'root' | 'character') => {
     if (dead || (menu === tab && stack.length === 1)) return
     if (editingTrade) update((s) => setSpellCombatTrade(sheet, s, tradeBefore.current))
+    if (editingValue) update((s) => setValue(s, valueKind, valueBefore.current))
+    if (editingQty) updateBook(() => qtyBefore.current)
     window.clearTimeout(finishTimer.current)
     setCard(null)
     flowUndo.current = null
     setStack([{ menu, sel: 0, label: '' }])
     fire('cursor', { noAnim: true })
+    fire('tabChange', { target: listRef.current })
   }
 
   // Dónde estás, para el encabezado de las tarjetas: "Personaje › Defensa"
@@ -470,6 +530,19 @@ function PlayApp() {
       />
       {card && 'spell' in card && <SpellCard spell={card.spell} ctx={ctx} where={where} onClose={back} />}
       {card && 'detail' in card && <DetailCard detail={card.detail} where={where} onClose={back} />}
+      {form && (
+        <FormCard
+          key={form.id}
+          spec={form}
+          where={where}
+          onClose={back}
+          onDone={(held) => {
+            ghostClick.current = held
+            setForm(null)
+            fire('actionExecute', { noAnim: true })
+          }}
+        />
+      )}
       <div className="fx-overlay" ref={(el) => registerLayer('overlay', el)} />
       <div className="fx-slash" ref={(el) => registerLayer('slash', el)} />
       {!started && (
@@ -480,7 +553,7 @@ function PlayApp() {
           <small>{t('play.startHint')}</small>
           {fixes.length > 0 && (
             <small className="start-notice" data-testid="play-start-notice">
-              {t('play.fix.title')} {fixes.map((f) => fixText(t, lang, f)).join(' · ')}
+              {t('play.fix.title')} {fixes.map((f) => fixText(t, f)).join(' · ')}
             </small>
           )}
         </button>

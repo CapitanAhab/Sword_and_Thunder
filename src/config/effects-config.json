@@ -193,6 +193,51 @@
         "preset": "short",
         "pattern": [12]
       }
+    },
+    "sheetEnter": {
+      "animation": {
+        "preset": "boot",
+        "durationMs": 400,
+        "easing": "steps(8, end)"
+      },
+      "sound": {
+        "preset": "none",
+        "notes": []
+      },
+      "vibrate": {
+        "preset": "none",
+        "pattern": []
+      }
+    },
+    "cardOpen": {
+      "animation": {
+        "preset": "flip",
+        "durationMs": 300,
+        "easing": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "sound": {
+        "preset": "none",
+        "notes": []
+      },
+      "vibrate": {
+        "preset": "none",
+        "pattern": []
+      }
+    },
+    "tabChange": {
+      "animation": {
+        "preset": "boot",
+        "durationMs": 250,
+        "easing": "steps(6, end)"
+      },
+      "sound": {
+        "preset": "none",
+        "notes": []
+      },
+      "vibrate": {
+        "preset": "none",
+        "pattern": []
+      }
     }
   }
 }

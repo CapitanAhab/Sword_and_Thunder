@@ -9,7 +9,7 @@ import { formatInt } from '../sheet/labels'
 import type { FormSpec, FormValues } from './FormCard'
 import type { MenuCtx, MenuItem } from './menus'
 
-// Lo que se anota en la mesa: Notas, Inventario, Oro y XP, Respaldo. Filas de la pestaña Personaje y sus submenús.
+// Lo que se anota en la mesa: Oro y XP, Inventario, Notas, Respaldo. Filas de Personaje › Libreta y sus submenús.
 export interface Book {
   base: Character // el personaje del JSON: Inventario muestra también lo que te sacaste
   notebook: Notebook
@@ -205,12 +205,13 @@ function backup(c: MenuCtx, book: Book): MenuItem[] {
   ]
 }
 
-// --- Filas de Personaje ---
-export function bookRows(c: MenuCtx): MenuItem[] {
-  const { book, t: tr } = c
-  if (!book) return []
+// --- Libreta ---
+function notebookRows(c: MenuCtx, book: Book): MenuItem[] {
+  const tr = c.t
   const notes = c.character.notes ?? ''
   return [
+    { id: 'purse', label: tr('play.purse'), detail: { title: tr('play.purse'), line: tr('play.purseNote') }, action: { type: 'open', menu: 'purse' } },
+    { id: 'inventory', label: tr('play.inventory'), detail: { title: tr('play.inventory'), line: tr('play.inventoryNote') }, action: { type: 'open', menu: 'inventory' } },
     {
       id: 'notes',
       label: tr('play.notes'),
@@ -225,8 +226,6 @@ export function bookRows(c: MenuCtx): MenuItem[] {
         },
       },
     },
-    { id: 'inventory', label: tr('play.inventory'), detail: { title: tr('play.inventory'), line: tr('play.inventoryNote') }, action: { type: 'open', menu: 'inventory' } },
-    { id: 'purse', label: tr('play.purse'), detail: { title: tr('play.purse'), line: tr('play.purseNote') }, action: { type: 'open', menu: 'purse' } },
     { id: 'backup', label: tr('play.backup'), detail: { title: tr('play.backup'), line: tr('play.backupNote') }, action: { type: 'open', menu: 'backup' } },
   ]
 }
@@ -235,6 +234,7 @@ export function bookMenu(kind: string, c: MenuCtx, id: string): MenuItem[] {
   const { book } = c
   if (!book) return []
   switch (kind) {
+    case 'notebook': return notebookRows(c, book)
     case 'inventory': return inventory(c, book)
     case 'stock': return stockMenu(c, book, id)
     case 'qty': return qtyMenu(c, book, id)

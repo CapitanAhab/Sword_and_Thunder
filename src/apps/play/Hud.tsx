@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useT } from '../../i18n/useT'
 import { href } from '../../router'
 import { useSession } from '../../state/SessionContext'
@@ -8,16 +8,60 @@ import { formatValue, minus } from '../sheet/labels'
 import { localBuff, localName, localSpell } from '../../data/names'
 import { fire, hpBarMs, isMuted, setMuted, type HpSide } from './fx/effects'
 import { externalLabel } from './menus'
+import { HOLD_MS as END_HOLD_MS, useHold } from './useHold'
 
-// HUD de arriba: solo mirar. Interacciones: la barra de HP (tocar → [−] 7/11 (−4) [+], se aplica sola a los 1,5 s)
-// y, en combate, el botón ▸▸ de nuevo turno (onTurn: avanza la ronda y vuelve a la pestaña Pelea).
+// HUD de arriba: para mirar. Interacciones: la barra de HP (tocar → [−] 7/11 (−4) [+], se aplica sola a los 1,5 s)
+// y el botón de combate: ⚔ inicia; en combate, ▸▸ pasa turno y, mantenido, termina el combate.
 // healRequest: cada vez que cambia (se tomó una poción de curar), se abre el editor para sumar la cura.
 const APPLY_MS = 1500
 const HOLD_MS = 400
 // Después de una poción, el editor espera más antes de cerrarse solo: hay que tirar el dado
 const HEAL_WAIT_MS = 10000
 
-export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healRequest?: number }) {
+// Un solo botón para todo el combate. Terminar no se deshace: se confirma manteniendo apretado, y el mismo botón
+// cambia a las espadas tachadas mientras se llena.
+function CombatButton({ inCombat, onStart, onTurn, onEnd }: { inCombat: boolean; onStart: () => void; onTurn: () => void; onEnd: () => void }) {
+  const { t } = useT()
+  // Al soltar un mantener completo, el navegador manda un click sobre este botón, que ya es ⚔: ese click se ignora
+  const held = useRef(false)
+  const { holding, handlers } = useHold(() => {
+    held.current = true
+    onEnd()
+  })
+  const onClick = () => {
+    if (held.current) {
+      held.current = false
+      return
+    }
+    if (inCombat) onTurn()
+    else onStart()
+  }
+  const label = !inCombat ? t('play.combatStart') : holding ? t('play.combatEnd') : `${t('play.newTurn')}. ${t('play.holdToEndCombat')}`
+  return (
+    <button
+      type="button"
+      className={`hud-turn${inCombat ? ' hold' : ''}${holding ? ' holding' : ''}`}
+      style={{ '--hold-ms': `${END_HOLD_MS}ms` } as CSSProperties}
+      onPointerDownCapture={() => (held.current = false)}
+      onClick={onClick}
+      {...(inCombat ? handlers : {})}
+      aria-label={label}
+      title={label}
+      data-testid={inCombat ? 'btn-turn' : 'btn-combat-start'}
+    >
+      {inCombat ? (
+        <>
+          <span className="hud-turn-next">▸▸</span>
+          <span className="hud-turn-end" aria-hidden="true">⚔</span>
+        </>
+      ) : (
+        <span>⚔</span>
+      )}
+    </button>
+  )
+}
+
+export function Hud({ onTurn, onCombatStart, onCombatEnd, healRequest = 0 }: { onTurn: () => void; onCombatStart: () => void; onCombatEnd: () => void; healRequest?: number }) {
   const { t } = useT()
   const { sheet, session, update } = useSession()
   const [muted, setMutedState] = useState(isMuted)
@@ -111,19 +155,15 @@ export function Hud({ onTurn, healRequest = 0 }: { onTurn: () => void; healReque
     <header className="hud" ref={hudRef}>
       <div className="hud-top">
         {combat ? (
-          <>
-            <span className="hud-name hud-round" data-testid="hud-round">
-              ⚔ {combat.round ? `${t('play.round')} ${combat.round}` : t('play.combat')}
-            </span>
-            <button type="button" className="hud-turn" onClick={onTurn} aria-label={t('play.newTurn')} title={t('play.newTurn')} data-testid="btn-turn">
-              ▸▸
-            </button>
-          </>
+          <span className="hud-name hud-round" data-testid="hud-round">
+            ⚔ {combat.round ? `${t('play.round')} ${combat.round}` : t('play.combat')}
+          </span>
         ) : (
           <span className="hud-name">
             {sheet.name} · {sheet.classes.map((c) => `${localName(c.id, c.name)} ${c.level}`).join(' / ')}
           </span>
         )}
+        {!dead && <CombatButton inCombat={Boolean(combat)} onStart={onCombatStart} onTurn={onTurn} onEnd={onCombatEnd} />}
         {/* Si había un cambio de PG sin aplicar (antes de 1,5 s), se aplica antes de salir para no perderlo */}
         <a className="hud-icon" href={href('sheet')} onClick={() => pending !== null && commit()} aria-label={t('nav.sheet')} data-testid="hud-sheet">
           📄

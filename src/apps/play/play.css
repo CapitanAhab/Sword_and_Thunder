@@ -154,6 +154,34 @@ a.hud-icon {
   font-size: 1rem;
   font-weight: 700;
   white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Mantener ▸▸: pasa a las espadas tachadas. El retardo evita que un toque corto parpadee */
+.hud-turn .hud-turn-end {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+}
+.hud-turn .hud-turn-end::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 2px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+.hud-turn.holding .hud-turn-next {
+  opacity: 0;
+  transition: opacity 0s 200ms;
+}
+.hud-turn.holding .hud-turn-end {
+  opacity: 1;
+  transition: opacity 0s 200ms;
 }
 .gold {
   color: var(--gold);

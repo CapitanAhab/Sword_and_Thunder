@@ -14,3 +14,6 @@ Thumbs.db
 
 # logs
 *.log
+
+# referencias visuales locales (no van al repo)
+refs/

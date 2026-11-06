@@ -4,7 +4,7 @@ import { href } from '../../router'
 import { useCharacter, useNotebook } from '../../state/CharacterContext'
 import { SessionProvider, useSession } from '../../state/SessionContext'
 import {
-  addFreeEffect, adjustPrepared, afterAction, clearUndo, emptyFreeDraft, hpState, nextTurn, prepare, recordAction, rest, sameUndo, setSpellCombatTrade, timesCast,
+  addFreeEffect, adjustPrepared, afterAction, clearUndo, emptyFreeDraft, endCombat, hpState, nextTurn, prepare, recordAction, rest, sameUndo, setSpellCombatTrade, startCombat, timesCast,
   itemsLeft, setValue, trackUndo, undoLast, valueOf,
   type ValueKind,
   type FreeDraft, type Session, type SessionFix, type SpellCounts,
@@ -12,7 +12,7 @@ import {
 import { localName, localSpell } from '../../data/names'
 import { endsOnAttack } from '../../data/items'
 import type { Translate } from '../sheet/labels'
-import { buildMenu, type After, type MenuCtx, type MenuItem } from './menus'
+import { buildMenu, prebuffRounds, type After, type MenuCtx, type MenuItem } from './menus'
 import { eventFx, fire, registerLayer, unlockAudio } from './fx/effects'
 import { Hud } from './Hud'
 import { DetailPanel } from './DetailPanel'
@@ -381,17 +381,29 @@ function PlayApp() {
     finish('root', 0)
   }
 
-  // NUEVO TURNO (desde cualquier pantalla): avanza la ronda y deja la pestaña Pelea con el cursor en la fila de arriba
-  // (↻ Repetir), cuyo detalle muestra lo urgente en amarillo. Lo que vence y lo que queda se ve en Estado y en los chips.
-  // Transición 8-bit de la ficha (sin sonido) + el sonido de submenuEnter: un solo sonido (Regla A).
-  const onTurn = () => {
+  // El botón del HUD (desde cualquier pantalla): aplica el cambio y deja la pestaña Pelea con el cursor arriba.
+  const toFight = (change: (s: Session) => Session) => {
     window.clearTimeout(finishTimer.current)
     setCard(null)
     flowUndo.current = null
-    update(nextTurn)
+    update(change)
     setStack([{ menu: 'root', sel: 0, label: '' }])
+  }
+  // NUEVO TURNO: avanza la ronda; la fila de arriba (↻ Repetir) muestra lo urgente en amarillo en su detalle. Lo que
+  // vence y lo que queda se ve en Estado y en los chips.
+  // Transición 8-bit de la ficha (sin sonido) + el sonido de submenuEnter: un solo sonido (Regla A).
+  const onTurn = () => {
+    toFight(nextTurn)
     fire('sheetPageChange', { target: rootRef.current })
     fire('submenuEnter', { noAnim: true })
+  }
+  const onCombatStart = () => {
+    toFight(track((s) => startCombat(s, prebuffRounds(ctx)), t('play.combatStart')))
+    fire('start', { target: rootRef.current })
+  }
+  const onCombatEnd = () => {
+    toFight(track(endCombat, t('play.combatEnd')))
+    fire('back')
   }
 
   // Un ítem `hold` no se confirma con un toque: solo con la fila o CONFIRMAR apretados.
@@ -467,7 +479,7 @@ function PlayApp() {
       onPointerDownCapture={() => (ghostClick.current = false)}
       onPointerUpCapture={() => started && fireFullscreen()}
     >
-      <Hud onTurn={onTurn} healRequest={healRequest} />
+      <Hud onTurn={onTurn} onCombatStart={onCombatStart} onCombatEnd={onCombatEnd} healRequest={healRequest} />
       <div
         className="navwrap"
         onTouchStart={(e) => {

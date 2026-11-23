@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 // Hash routing: GitHub Pages no tiene fallback de SPA, así que las rutas viven en el hash (#/sheet).
-export const ROUTES = ['sheet', 'play', 'level-up'] as const
+export const ROUTES = ['sheet', 'play'] as const
 export type Route = (typeof ROUTES)[number]
 
 const DEFAULT_ROUTE: Route = 'sheet'

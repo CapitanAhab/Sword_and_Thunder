@@ -4,7 +4,7 @@ import { href } from '../../router'
 import { useCharacter, useNotebook } from '../../state/CharacterContext'
 import { SessionProvider, useSession } from '../../state/SessionContext'
 import {
-  addFreeEffect, adjustPrepared, afterAction, clearUndo, emptyFreeDraft, endCombat, hpState, nextTurn, prepare, recordAction, rest, sameUndo, setSpellCombatTrade, startCombat, timesCast,
+  addFreeEffect, adjustPrepared, afterAction, clearUndo, emptyFreeDraft, endCombat, hpState, nextTurn, prepare, rest, sameUndo, startCombat, timesCast,
   itemsLeft, setValue, trackUndo, undoLast, valueOf,
   type ValueKind,
   type FreeDraft, type Session, type SessionFix, type SpellCounts,
@@ -22,6 +22,9 @@ import { SpellCard } from './SpellCard'
 import { DetailCard } from './DetailCard'
 import { FormCard, type FormSpec } from './FormCard'
 import { stockDelta } from './notebookMenus'
+import { canLevelUp, stepLevelRank } from '../../core/notebook'
+import { formatInt } from '../sheet/labels'
+import { db } from '../../data'
 import './play.css'
 
 // Menú jugable (#/play): HUD → detalle → lista con cursor → barra del pulgar. Lee la ficha + la sesión.
@@ -99,6 +102,8 @@ function PlayApp() {
   const { character, session, sheet, update, fixes } = useSession()
   const { base, notebook, update: updateBook } = useNotebook()
   const [form, setForm] = useState<FormSpec | null>(null)
+  // Aviso de nivel: al guardar la XP, si antes no alcanzaba y ahora sí, se ofrece ir al asistente
+  const levelCheck = useRef<{ before: boolean } | null>(null)
   const [started, setStarted] = useState(resume.started)
   const [stack, setStack] = useState<Frame[]>(resume.stack)
   const [draft, setDraft] = useState<SpellCounts>(resume.draft)
@@ -131,9 +136,6 @@ function PlayApp() {
   const preparing = !dead && frame.menu === 'prepare'
   // El editor del modificador Libre usa la misma barra que Preparar: [✕] [−] [+] [LISTO]
   const editingFree = !dead && frame.menu === 'effect-free'
-  // Y el de Ataque por Conc (Combate con conjuros a la defensiva): cambia la sesión en vivo; ✕ vuelve al valor de antes
-  const editingTrade = !dead && frame.menu.startsWith('trade:')
-  const tradeBefore = useRef(0)
   // Y el de PG temporales, no letal y daño de atributo: igual, en vivo; ✕ vuelve al valor de antes
   const editingValue = !dead && frame.menu.startsWith('value:')
   const valueKind = frame.menu.slice('value:'.length) as ValueKind
@@ -142,11 +144,39 @@ function PlayApp() {
   const editingQty = !dead && frame.menu.startsWith('qty:')
   const qtyId = frame.menu.slice('qty:'.length)
   const qtyBefore = useRef(notebook)
-  const editing = preparing || editingFree || editingTrade || editingValue || editingQty
+  // Y el de los rangos al subir de nivel: cambia la libreta en vivo; ✕ vuelve a como estaba
+  const editingRanks = !dead && frame.menu === 'levelup-ranks'
+  const ranksBefore = useRef(notebook)
+  const editing = preparing || editingFree || editingValue || editingQty || editingRanks
 
   const rowEl = (i: number) => listRef.current?.querySelectorAll<HTMLElement>('.row')[i]
   const setSel = (i: number) => setStack((s) => [...s.slice(0, -1), { ...frame, sel: i }])
   const push = (menu: string, label: string) => setStack((s) => [...s, { menu, sel: 0, label }])
+
+  // Después de guardar la XP (la libreta ya cambió): si recién ahora alcanza, la tarjeta ofrece subir de nivel.
+  // SUBIR AHORA deja Personaje › ▲ Subir a nivel N; MÁS TARDE (o ✕) vuelve a donde estabas.
+  useEffect(() => {
+    const check = levelCheck.current
+    if (!check) return
+    levelCheck.current = null
+    if (check.before || !canLevelUp(sheet)) return
+    const label = t('levelUp.row').replace('{n}', String(sheet.level + 1))
+    const next = sheet.xp.next === null ? '' : ` / ${formatInt(sheet.xp.next)}`
+    setForm({
+      id: 'levelup-ready',
+      title: t('levelUp.ready').replace('{n}', String(sheet.level + 1)),
+      note: `${t('sheet.xp')} ${formatInt(character.xp)}${next}`,
+      fields: [],
+      actions: [
+        { id: 'later', label: t('levelUp.later'), run: () => {} },
+        {
+          id: 'now',
+          label: t('levelUp.now'),
+          run: () => setStack([{ menu: 'character', sel: 0, label: '' }, { menu: 'levelup', sel: 0, label }]),
+        },
+      ],
+    })
+  }, [notebook])
 
   const select = (i: number) => {
     if (i === sel || i < 0 || i >= items.length) return
@@ -170,9 +200,9 @@ function PlayApp() {
     }
     if (dead) return
     if (stack.length === 1) return
-    if (editingTrade) update((s) => setSpellCombatTrade(sheet, s, tradeBefore.current))
     if (editingValue) update((s) => setValue(s, valueKind, valueBefore.current))
     if (editingQty) updateBook(() => qtyBefore.current)
+    if (editingRanks) updateBook(() => ranksBefore.current)
     setStack((s) => s.slice(0, -1))
     fire('back', { target: listRef.current })
   }
@@ -186,11 +216,6 @@ function PlayApp() {
       fire('cursor', { noAnim: true })
       return
     }
-    if (editingTrade) {
-      update((s) => setSpellCombatTrade(sheet, s, s.spellCombatTrade + d))
-      fire('cursor', { noAnim: true })
-      return
-    }
     if (editingValue) {
       update((s) => setValue(s, valueKind, valueOf(s, valueKind) + d))
       fire('cursor', { noAnim: true })
@@ -198,6 +223,12 @@ function PlayApp() {
     }
     if (editingQty) {
       if (d > 0 || itemsLeft(character, session, qtyId) > 0) updateBook((nb) => stockDelta(nb, character, qtyId, d))
+      fire('cursor', { noAnim: true })
+      return
+    }
+    if (editingRanks) {
+      const id = item.field
+      if (id && base) updateBook((nb) => stepLevelRank(base, nb, db, id, d))
       fire('cursor', { noAnim: true })
       return
     }
@@ -271,9 +302,9 @@ function PlayApp() {
       case 'open':
         if (a.menu === 'prepare') setDraft(session.prepared)
         if (a.menu === 'effect-free') setFree(emptyFreeDraft())
-        if (a.menu.startsWith('trade:')) tradeBefore.current = session.spellCombatTrade
         if (a.menu.startsWith('value:')) valueBefore.current = valueOf(session, a.menu.slice('value:'.length) as ValueKind)
         if (a.menu.startsWith('qty:')) qtyBefore.current = notebook
+        if (a.menu === 'levelup-ranks') ranksBefore.current = notebook
         push(a.menu, it.label)
         fire('submenuEnter', { target: listRef.current })
         break
@@ -282,18 +313,12 @@ function PlayApp() {
           // Deshacer: si gasta recursos se guarda (o sigue el flujo); si no (Atacar, Maniobrar…), borra lo que había.
           // En ¿Le pegaste? sin un lanzamiento antes (Descargar toque), el nombre es el de la pantalla.
           const onTouch = frame.menu.startsWith('touch:')
-          const label = onTouch ? frame.label : it.label.replace(/^↻ /, '')
+          const label = onTouch ? frame.label : it.label
           const step = track(a.update ?? ((s: Session) => s), label)
           const deferred = onTouch ? step : undefined
           if (!deferred) update(step)
-          // Acción del turno en combate: queda como la última, para ↻ Repetir (las respuestas de ¿Le pegaste? no cuentan)
-          if (session.combat && it.act && it.act !== 'downtime' && !deferred) {
-            const origin = it.origin ?? { menu: frame.menu, item: it.id }
-            update((s) => recordAction(s, origin.menu, origin.item))
-          }
-          // Cualquier acción del turno usa la acción preparada (salvo prepararla, también desde ↻ Repetir), y atacar
-          // o lanzar sobre alguien corta lo que termina al atacar (la invisibilidad)
-          if (it.act && it.act !== 'downtime' && (it.origin?.item ?? it.id) !== 'ready') {
+          // Atacar o lanzar sobre alguien corta lo que termina al atacar (la invisibilidad)
+          if (it.act && it.act !== 'downtime') {
             update((s) => afterAction(s, Boolean(it.offensive), endsOnAttack))
           }
           // Poción de curar: al volver al menú principal se abre el editor de PG para sumar la cura
@@ -363,15 +388,7 @@ function PlayApp() {
       finish('root', 0)
       return
     }
-    if (editingTrade) {
-      // LISTO de Ataque por Conc: el valor ya quedó en la sesión; vuelve a la lista de conjuros (no es una acción).
-      // Como los ON/OFF, no se deshace.
-      update(track((s) => s, t('play.trade')))
-      fire('submenuEnter', { noAnim: true })
-      setStack((s) => s.slice(0, -1))
-      return
-    }
-    if (editingValue || editingQty) {
+    if (editingValue || editingQty || editingRanks) {
       fire('submenuEnter', { noAnim: true })
       setStack((s) => s.slice(0, -1))
       return
@@ -389,7 +406,7 @@ function PlayApp() {
     update(change)
     setStack([{ menu: 'root', sel: 0, label: '' }])
   }
-  // NUEVO TURNO: avanza la ronda; la fila de arriba (↻ Repetir) muestra lo urgente en amarillo en su detalle. Lo que
+  // NUEVO TURNO: avanza la ronda; la primera fila de Pelea muestra lo urgente en amarillo en su detalle. Lo que
   // vence y lo que queda se ve en Estado y en los chips.
   // Transición 8-bit de la ficha (sin sonido) + el sonido de submenuEnter: un solo sonido (Regla A).
   const onTurn = () => {
@@ -449,9 +466,9 @@ function PlayApp() {
   const tab = stack[0]?.menu === 'character' ? 'character' : 'root'
   const goTab = (menu: 'root' | 'character') => {
     if (dead || (menu === tab && stack.length === 1)) return
-    if (editingTrade) update((s) => setSpellCombatTrade(sheet, s, tradeBefore.current))
     if (editingValue) update((s) => setValue(s, valueKind, valueBefore.current))
     if (editingQty) updateBook(() => qtyBefore.current)
+    if (editingRanks) updateBook(() => ranksBefore.current)
     window.clearTimeout(finishTimer.current)
     setCard(null)
     flowUndo.current = null
@@ -550,6 +567,8 @@ function PlayApp() {
           onClose={back}
           onDone={(held) => {
             ghostClick.current = held
+            // La libreta se actualiza en el próximo render: ahí se mira si recién ahora alcanza para subir
+            if (form.id === 'xp') levelCheck.current = { before: canLevelUp(sheet) }
             setForm(null)
             fire('actionExecute', { noAnim: true })
           }}

@@ -64,6 +64,11 @@ const traitSchema = z.object({
   modifiers: z.array(modifierInputSchema).default([]),
 })
 
+export const arcanaSchema = z.object({
+  name: z.string().min(1),
+  notes: z.string().optional(),
+})
+
 const armorSchema = z.object({
   name: z.string(),
   category: armorCategorySchema,
@@ -144,6 +149,7 @@ export const characterSchema = z.object({
   levels: z.array(levelSchema).min(1),
   feats: z.array(featSchema).default([]),
   traits: z.array(traitSchema).default([]),
+  arcana: z.array(arcanaSchema).default([]), // Arcanos del magus elegidos: nombre y nota, sin cálculo
   languages: z.array(z.string()).default([]), // los que elige el jugador, además de los de la raza
   xp: z.number().int().nonnegative().default(0),
   xpTrack: z.enum(['slow', 'medium', 'fast']).default('medium'),

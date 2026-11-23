@@ -16,7 +16,6 @@ export const BASIC_ACTIONS = {
   maneuver: 'standard',
   'use-item': 'standard',
   discharge: 'standard', // descargar un toque retenido
-  ready: 'standard', // preparar una acción: actuás después, cuando pasa lo que esperás
 } satisfies Record<string, ActionKind>
 
 // Acciones básicas que provocan ataques de oportunidad en una casilla amenazada (las dotes "Mejorada"

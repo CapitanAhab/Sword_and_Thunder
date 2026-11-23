@@ -13,9 +13,9 @@ import {
 import {
   applyAction, castInfoFor, castSpell, castsLeft, charge, checkAction, applyItem, currentHp, dropHeld, endBuff, endCharge, endEnhancement,
   enhanceWeapon, hpState, isCantrip, itemsLeft, preparedTotal, recallCost, recallSpell, resourceLeft, rest, slotsLeft, slotsPerDay, spellActionKind,
-  spendResource, timesCast, timesPrepared, toggleCondition, toggleDefensive, toggleStance, touchHit, undoDeath, revive, type Session,
-  chargeBlock, chargeDistance, chargeKind, currentSpeed, toggleSurprise, emptyFreeDraft, removeExternal, toggleCommonEffect,
-  ready, endReadied, proneAc,
+  setSpellCombatTrade, spendResource, timesCast, timesPrepared, toggleCondition, toggleDefensive, togglePowerAttack, toggleSpellstrike, toggleStance, touchHit, undoDeath, revive, type Session,
+  chargeBlock, chargeDistance, chargeKind, currentSpeed, emptyFreeDraft, removeExternal, toggleCommonEffect,
+  proneAc,
   turnUrgent,
   type FreeDraft, type SpellCounts,
 } from '../../core/session'
@@ -28,6 +28,7 @@ import type { ValueKind } from '../../core/session'
 import type { Notebook } from '../../core/notebook'
 import type { FormSpec } from './FormCard'
 import { bookMenu, type Book } from './notebookMenus'
+import { levelUpMenu, levelUpRow } from './levelUpMenus'
 import { actionNoteLabel, componentLabel, formatValue, minus, prettyCrit, SKILL_SEP, slotLabel, statParts, statRows, type StatRow, type Translate } from '../sheet/labels'
 
 // Árbol del menú de #/play a partir de la ficha calculada + la sesión. Solo arma textos y acciones:
@@ -59,14 +60,26 @@ export interface DetailStat {
   value: string
 }
 
+// Un renglón de las tiradas: el número que tirás (grande, en columna) y qué es. Sin número, es un renglón de apoyo.
+export interface DetailStep {
+  roll?: string
+  text: string
+}
+export interface DetailSteps {
+  title?: string
+  lines: DetailStep[]
+}
+
 export interface MenuItem {
   id: string
   label: string
   section?: string // encabezado que va antes de este ítem
   badge?: { text: string; tone?: 'mana' | 'gold' | 'muted' | 'on' }
+  hint?: string // texto apagado antes del badge (el atributo de una habilidad: "INT")
   // warn: aviso que va primero en la descripción (moribundo / incapacitado, ver gate())
   // parts: el desglose en filas, solo para la tarjeta (en la franja se ve como `note`)
-  detail: { title: string; tag?: string; stats?: DetailStat[]; line?: string; note?: string; extra?: string; warn?: string; parts?: StatRow[] }
+  // steps: las tiradas en grupos (título + renglones); la franja crece solo cuando las hay
+  detail: { title: string; tag?: string; stats?: DetailStat[]; line?: string; note?: string; extra?: string; warn?: string; parts?: StatRow[]; steps?: DetailSteps[] }
   spell?: { level: string; name: string } // si está, tocar el detalle abre la tarjeta
   hold?: boolean // se confirma manteniendo apretado (CONFIRMAR o la fila)
   act?: ActionKind // tipo de acción en el turno (gate() → core: checkAction / applyAction)
@@ -76,8 +89,6 @@ export interface MenuItem {
   // Qué hace la fila, para señalizarla (lo pone buildMenu): 'submenu' lleva › a la derecha; 'info' es solo para leer
   // (se ve apagada y el 2do toque abre la tarjeta del detalle).
   nav?: 'submenu' | 'info'
-  // Fila "Repetir": la acción original (menú + fila), que es la que se guarda como última acción.
-  origin?: { menu: string; item: string }
   field?: string // editor del modificador Libre: qué valor cambian − / +
   action: ItemAction
 }
@@ -98,30 +109,31 @@ const diamonds = (left: number, total: number) => '◆'.repeat(left) + '◇'.rep
 const byNumber = (a: string, b: string) => Number(a) - Number(b)
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const onOff = (on: boolean): MenuItem['badge'] => ({ text: on ? 'ON' : 'OFF', tone: on ? 'on' : 'muted' })
-// En las listas para agregar (condiciones, efectos de otros): ✓ en lo que ya tenés
-const check = (on: boolean): MenuItem['badge'] => (on ? { text: '✓', tone: 'on' } : undefined)
 
 const weaponStats = (t: Translate, a: AttackLine, v: AttackVariant, attack = sv(v.attack.total)): DetailStat[] => [
   { id: 'attack', label: t('play.col.attack'), value: attack },
   { id: 'damage', label: t('play.col.damage'), value: minus(v.damageText) },
   { id: 'crit', label: t('play.col.crit'), value: prettyCrit(a.critical) },
 ]
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 const actionTag = (t: Translate, kind: ActionKind) => t(kind === 'full' ? 'play.fullRoundShort' : 'play.standardAction')
-// Rótulo con los ataques de oportunidad que provoca: "Acción estándar · Provoca AdO".
-const aooTag = (t: Translate, kind: ActionKind, aoo = 0) =>
-  aoo > 0 ? `${actionTag(t, kind)} · ${t('play.provokes')} ${t('play.aoo')}` : actionTag(t, kind)
-// En los conjuros, el rótulo dice por qué provoca: "… · AdO al lanzar", "… · AdO al atacar" o "… · AdO al lanzar y al atacar".
-const spellAoOTag = (t: Translate, kind: ActionKind, aoo: SpellAoO) => {
-  const key: MessageKey | null = aoo.cast && aoo.attack ? 'play.aooBoth' : aoo.cast ? 'play.aooCast' : aoo.attack ? 'play.aooAttack' : null
-  return key ? `${actionTag(t, kind)} · ${t(key)}` : actionTag(t, kind)
-}
-// "Ataque: +4 −2 (Combate con conjuros)": el ataque normal y lo que suma o resta la variante (los dos salen de computeSheet).
-const variantAttackNote = (c: MenuCtx, std: AttackVariant, v: AttackVariant): string | undefined => {
-  if (v.id === std.id) return undefined
-  const own = v.attack.applied.filter((m) => m.source === v.name && m.value !== 0)
-  if (own.length === 0) return undefined
-  const parts = own.map((m) => componentLabel(c.t, m, false, (s) => localSource(s)))
-  return `${c.t('play.col.attack')}: ${[sv(std.attack.total), ...parts].join(' ')}`
+// Qué pasa, en castellano llano: "Acción estándar, provoca".
+const aooTag = (t: Translate, kind: ActionKind, aoo = 0) => (aoo > 0 ? `${actionTag(t, kind)}, ${t('play.provokes')}` : actionTag(t, kind))
+// En los conjuros, por qué provoca: "lanzar provoca", "el toque a distancia provoca", los dos o "no provoca".
+const spellAoOText = (t: Translate, aoo: SpellAoO) =>
+  t(aoo.cast && aoo.attack ? 'play.aooBoth' : aoo.cast ? 'play.aooCast' : aoo.attack ? 'play.aooAttack' : 'play.noProvoke')
+const spellAoOTag = (t: Translate, kind: ActionKind, aoo: SpellAoO) => `${actionTag(t, kind)}, ${spellAoOText(t, aoo)}`
+
+// Las tiradas del arma: un renglón por ataque (el número a tirar → el daño) y el crítico debajo.
+function weaponSteps(t: Translate, a: AttackLine, v: AttackVariant, rolls: number[] = [v.attack.total]): DetailStep[] {
+  const damage = minus(v.damageText)
+  return [
+    ...rolls.map((r, i): DetailStep => ({
+      roll: sv(r),
+      text: rolls.length > 1 ? fill(t('play.step.nth'), { n: String(i + 1), damage }) : fill(t('play.step.hit'), { damage }),
+    })),
+    { text: fill(t('play.step.crit'), { crit: prettyCrit(a.critical) }) },
+  ]
 }
 const levelLabel = (t: Translate, level: string) => (isCantrip(level) ? t('play.cantrips') : `${t('play.level')} ${level}`)
 const casterLevel = (c: MenuCtx) => c.sheet.spellcasting[0]?.casterLevel.total ?? 1
@@ -153,36 +165,61 @@ function touchText(c: MenuCtx, name: string, variant: string): string {
   return kind === 'melee-touch' ? `${c.t('play.touch')} ${sv(touch.melee.total)}` : `${c.t('play.rangedTouch')} ${sv(touch.ranged.total)}`
 }
 
-// Concentración de cada conjuro, siempre a la vista, con la CD del caso (core: concentrationCase):
-//   "Conc +5 · si te pegan CD 11+daño" · "Conc +9 vs CD 17" (a la defensiva)
-//   "Conc +5 vs CD 16 (enredado)" · "Conc +9 vs CD 11+BMC (apresado)".
-// El total ya trae lo que suman la defensiva o el apresado (Combat Casting): sale de computeSheet con la sesión.
+// Concentración de cada conjuro, con la CD del caso (core: concentrationCase). El total ya trae lo que suman la
+// defensiva o el apresado (Combat Casting): sale de computeSheet con la sesión.
 // Con una variante (Combate con conjuros), la de esa variante si tiene ataque cambiado por concentración.
 const concFor = (c: MenuCtx, variant?: string) => {
   const sc = c.sheet.spellcasting[0]
   return (variant ? sc?.concentrationBy[variant] : undefined) ?? sc?.concentration
 }
-function concText(c: MenuCtx, level: string, variant?: string): string | undefined {
+function concStep(c: MenuCtx, level: string, variant?: string): DetailStep | null {
   const conc = concFor(c, variant)
-  if (!conc) return undefined
+  if (!conc) return null
+  const tr = c.t
   const l = Number(level)
-  const total = `${c.t('play.concShort')} ${sv(conc.total)}`
-  const dc = c.t('sheet.dc')
+  const roll = sv(conc.total)
   switch (concentrationCase(c.session.conditions, c.session.castDefensively)) {
-    case 'grappled': return `${total} vs ${dc} ${castingDcBase(l)}+${c.t('sheet.cmb')} (${c.t('play.concGrappled')})`
-    case 'defensive': return `${total} vs ${dc} ${defensiveCastingDc(l)}`
-    case 'entangled': return `${total} vs ${dc} ${entangledCastingDc(l)} (${c.t('play.concEntangled')})`
-    case 'damage': return `${total} · ${c.t('play.concIfHit')} ${dc} ${castingDcBase(l)}+${c.t('play.concDamage')}`
+    case 'damage': return { roll, text: fill(tr('play.step.ifDamaged'), { dc: String(castingDcBase(l)) }) }
+    case 'defensive': return { roll, text: fill(tr('play.step.conc'), { dc: String(defensiveCastingDc(l)) }) }
+    case 'entangled': return { roll, text: fill(tr('play.step.conc'), { dc: `${entangledCastingDc(l)} (${tr('play.concEntangled')})` }) }
+    case 'grappled': return { roll, text: fill(tr('play.step.conc'), { dc: `${castingDcBase(l)} + ${tr('sheet.cmb')} (${tr('play.concGrappled')})` }) }
   }
+}
+
+// El toque del conjuro (Combate con conjuros aplica su −2): el número a tirar → el daño o lo que hace.
+function touchStep(c: MenuCtx, name: string, variant: string): DetailStep | null {
+  const kind = spells[name]?.attack
+  const touch = c.sheet.touch[variant] ?? c.sheet.touch.standard
+  if (!kind || !touch) return null
+  const melee = kind === 'melee-touch'
+  return {
+    roll: sv(melee ? touch.melee.total : touch.ranged.total),
+    text: fill(c.t('play.step.touch'), { touch: c.t(melee ? 'play.touch' : 'play.rangedTouch'), effect: spellDamage(c, name) || spellSummary(c, name) }),
+  }
+}
+
+// Las tiradas de un conjuro: la concentración, el toque (o el daño) y la salvación del rival. Sin `withTouch`, el
+// toque no va (lo reemplaza el ataque del arma de Impacto con conjuro).
+function spellSteps(c: MenuCtx, level: string, name: string, variant: string, withTouch = true): DetailStep[] {
+  const def = spells[name]
+  const lines: DetailStep[] = []
+  const conc = concStep(c, level, variant)
+  if (conc) lines.push(conc)
+  const touch = withTouch ? touchStep(c, name, variant) : null
+  const damage = spellDamage(c, name)
+  if (touch) lines.push(touch)
+  else if (damage && withTouch) lines.push({ text: fill(c.t('play.step.damage'), { damage }) })
+  if (def?.save) lines.push({ text: fill(c.t('play.step.save'), { save: def.save, dc: String(spellDc(c, level, name) ?? '—') }) })
+  return lines
 }
 
 function spellHead(c: MenuCtx, level: string, name: string): string {
   const dc = spellDc(c, level, name)
-  return [levelLabel(c.t, level), dc === null ? '' : `${c.t('sheet.dc')} ${dc}`, spellRangeText(c, name)].filter(Boolean).join(' · ')
+  return [levelLabel(c.t, level), dc === null ? '' : `${c.t('sheet.dc')} ${dc}`, spellRangeText(c, name)].filter(Boolean).join(', ')
 }
 
 const spellEffect = (c: MenuCtx, name: string, variant: string) =>
-  [spellDamage(c, name), touchText(c, name, variant)].filter(Boolean).join(' · ')
+  [spellDamage(c, name), touchText(c, name, variant)].filter(Boolean).join(', ')
 const spellSummary = (c: MenuCtx, name: string) => spells[name]?.summary ?? c.t('play.unknownSpell')
 
 // Conjuros preparados de menor a mayor nivel, en el orden del spellbook.
@@ -199,7 +236,7 @@ function preparedSpells(c: MenuCtx): { level: string; name: string }[] {
 
 // Detalle: la Conc de ese momento (OFF +5, ON +9; no anticipa el valor de prenderlo). Con ON, además, lo que suma
 // lanzar a la defensiva, con la fuente nombrada ("+4 (Lanzar conjuros en combate)"). Las CD van en cada conjuro
-// (concText). Los totales salen de computeSheet.
+// (concStep). Los totales salen de computeSheet.
 const isDefensive = (condition: string | undefined) => Boolean(condition?.split('|').includes('casting-defensively'))
 
 function defensiveItem(c: MenuCtx): MenuItem {
@@ -219,19 +256,109 @@ function defensiveItem(c: MenuCtx): MenuItem {
 
 // Lista de conjuros para lanzar. Con `attack` es la de Spell Combat / Spellstrike (el detalle muestra el ataque;
 // `kind` es el tipo de acción de esa acción de clase).
-function castableItems(c: MenuCtx, attack?: { title: string; stats: DetailStat[]; variant: string; kind: ActionKind; weaponId: string }): MenuItem[] {
+type SpellAttack = { weapon: string; variant: string; kind: ActionKind; weaponId: string }
+
+// Ataca, daña o pide salvación: va arriba en Combate con conjuros
+const attacksWith = (name: string) => {
+  const def = spells[name]
+  return Boolean(def?.attack || def?.damage || def?.save)
+}
+
+// Qué pasa al lanzar: "Acción estándar, gasta 1 ◆, lanzar provoca".
+function castNote(c: MenuCtx, level: string, name: string, kind: ActionKind): string {
+  const cost = c.t(isCantrip(level) ? 'play.cantripFree' : 'play.spendsSlot')
+  return `${actionTag(c.t, kind)}, ${cost}, ${spellAoOText(c.t, spellAoO(spells[name]?.attack, c.session.castDefensively))}`
+}
+
+// --- Impacto con conjuro (Spellstrike) ---
+// Un switch en las listas de conjuros (queda hasta apagarlo). Prendido, un conjuro de toque cuerpo a cuerpo se entrega
+// con un ataque gratis del arma, con su mayor ataque base (en Combate con conjuros, con su −2): daño del arma + el
+// conjuro. El crítico usa el rango del arma, pero el conjuro solo hace ×2.
+const hasSpellstrike = (c: MenuCtx) => c.sheet.actions.some((a) => a.kind === 'spell-weapon')
+const spellstrikeFits = (c: MenuCtx, name: string) =>
+  c.session.spellstrike && hasSpellstrike(c) && spells[name]?.range === 'touch' && spells[name]?.attack === 'melee-touch'
+// El arma de Impacto: la primera cuerpo a cuerpo, con la variante pedida (o la estándar)
+function strikeWeapon(c: MenuCtx, variant: string): { a: AttackLine; v: AttackVariant } | null {
+  const a = c.sheet.attacks.find((x) => x.category !== 'ranged')
+  const v = a?.variants.find((x) => x.id === variant) ?? a?.variants.find((x) => x.id === 'standard')
+  return a && v ? { a, v } : null
+}
+function strikeGroup(c: MenuCtx, name: string, variant: string): DetailSteps | null {
+  const w = strikeWeapon(c, variant)
+  if (!w) return null
+  const [range = '', mult = ''] = prettyCrit(w.a.critical).split('/')
+  const weapon = localName(w.a.id, w.a.name)
+  return {
+    title: fill(c.t('play.stepsStrike'), { weapon }),
+    lines: [
+      { roll: sv(w.v.attack.total), text: fill(c.t('play.step.strike'), { weapon: minus(w.v.damageText), spell: spellDamage(c, name) || spellSummary(c, name) }) },
+      { text: fill(c.t('play.step.strikeCrit'), { range, mult }) },
+    ],
+  }
+}
+function spellstrikeItem(c: MenuCtx): MenuItem[] {
+  if (!hasSpellstrike(c)) return []
+  const on = c.session.spellstrike
+  return [{
+    id: 'spellstrike',
+    label: c.t('play.spellstrike'),
+    badge: onOff(on),
+    detail: { title: c.t('play.spellstrike'), line: c.t('play.spellstrikeNote'), note: c.t('play.spellstrikeFits') },
+    action: { type: 'toggle', on: !on, update: toggleSpellstrike },
+  }]
+}
+
+// Combate con conjuros, al elegir el conjuro: su nombre de título y las tiradas en grupos: el conjuro y el arma,
+// porque el conjuro va antes o después de los ataques; con Impacto, además, el ataque gratis del arma con el conjuro.
+// Los números salen de computeSheet.
+function spellCombatDetail(c: MenuCtx, level: string, name: string, attack: SpellAttack, kind: ActionKind): MenuItem['detail'] {
+  const tr = c.t
+  const a = c.sheet.attacks.find((x) => x.id === attack.weaponId)
+  const v = a?.variants.find((x) => x.id === attack.variant)
+  const cost = tr(isCantrip(level) ? 'play.cantripFree' : 'play.spendsSlot')
+  const provokes = spellAoOText(tr, spellAoO(spells[name]?.attack, c.session.castDefensively))
+  const strike = spellstrikeFits(c, name) ? strikeGroup(c, name, attack.variant) : null
+  const groups: DetailSteps[] = [
+    { title: tr('play.stepsSpell'), lines: spellSteps(c, level, name, attack.variant, !strike) },
+    ...(strike ? [strike] : []),
+    ...(a && v ? [{ title: attack.weapon, lines: weaponSteps(tr, a, v) }] : []),
+  ]
+  return {
+    title: localSpell(name),
+    line: fill(tr('play.withWeapon'), { weapon: attack.weapon, kind: lower(actionTag(tr, kind)) }),
+    note: capitalize(`${cost}, ${provokes}`),
+    steps: groups.filter((g) => g.lines.length),
+    warn: c.session.conditions.includes('prone') ? `⚠ ${tr('play.step.prone')}` : undefined,
+  }
+}
+
+// Un conjuro suelto (Pelea › Conjuros): nivel, CD y alcance; qué pasa al lanzarlo; qué hace; y las tiradas.
+function spellDetail(c: MenuCtx, level: string, name: string, kind: ActionKind): MenuItem['detail'] {
+  const strike = spellstrikeFits(c, name) ? strikeGroup(c, name, 'standard') : null
+  const steps = spellSteps(c, level, name, 'standard', !strike)
+  const groups: DetailSteps[] = [...(steps.length ? [{ lines: steps }] : []), ...(strike ? [strike] : [])]
+  return {
+    title: localSpell(name),
+    line: spellHead(c, level, name),
+    note: castNote(c, level, name, kind),
+    extra: spellSummary(c, name),
+    steps: groups.length ? groups : undefined,
+  }
+}
+
+function castableItems(c: MenuCtx, attack?: SpellAttack): MenuItem[] {
   const variant = attack?.variant ?? 'standard'
-  let lastLevel = ''
-  const items = preparedSpells(c).map(({ level, name }): MenuItem => {
-    const section = level !== lastLevel ? levelLabel(c.t, level) : undefined
-    lastLevel = level
-    const effect = spellEffect(c, name, variant)
+  // En Combate con conjuros, los que atacan van primero; si no, por nivel
+  const list = preparedSpells(c)
+  const ordered = attack ? [...list.filter((s) => attacksWith(s.name)), ...list.filter((s) => !attacksWith(s.name))] : list
+  let lastGroup = ''
+  const items = ordered.map(({ level, name }): MenuItem => {
+    const group = attack ? c.t(attacksWith(name) ? 'play.spellsOffensive' : 'play.spellsOther') : levelLabel(c.t, level)
+    const section = group !== lastGroup ? group : undefined
+    lastGroup = group
     const left = isCantrip(level) ? Infinity : castsLeft(c.session, level, name)
     const kind = spellActionKind(spells[name], attack?.kind)
-    const tag = spellAoOTag(c.t, kind, spellAoO(spells[name]?.attack, c.session.castDefensively))
-    const detail: MenuItem['detail'] = attack
-      ? { title: attack.title, tag, stats: attack.stats, line: `+ ${localSpell(name)} · ${effect || spellSummary(c, name)}`, note: concText(c, level, variant) }
-      : { title: localSpell(name), tag, line: spellHead(c, level, name), note: effect || spellSummary(c, name), extra: concText(c, level) ?? (effect ? spellSummary(c, name) : undefined) }
+    const detail: MenuItem['detail'] = attack ? spellCombatDetail(c, level, name, attack, kind) : spellDetail(c, level, name, kind)
     if (left <= 0) detail.note = c.t('play.noUsesLeft')
     const info = castInfoFor(spells[name], casterLevel(c))
     // Ofensivo: con el arma (Combate con conjuros) o un conjuro con ataque, daño o salvación (supuesto: va sobre alguien)
@@ -259,56 +386,42 @@ function castableItems(c: MenuCtx, attack?: { title: string; stats: DetailStat[]
   })
   // A la defensiva, en una variante que lo permite (Combate con conjuros): la fila para cambiar ataque por concentración
   const trade = attack && c.session.castDefensively && c.sheet.defensiveTrade?.variants.includes(variant)
-  return [defensiveItem(c), ...(trade && attack ? [tradeItem(c, variant, attack.weaponId)] : []), ...items]
+  return [defensiveItem(c), ...spellstrikeItem(c), ...(trade && attack ? [tradeItem(c, variant, attack.weaponId)] : []), ...items]
 }
 
 // --- Ataque por Conc (Combate con conjuros a la defensiva) ---
-// El valor vive en la sesión y se cambia en vivo con − / +: los números salen siempre de computeSheet.
-const tradeText = (c: MenuCtx) => (c.sheet.defensiveTrade?.value ? sv(-c.sheet.defensiveTrade.value) : '0')
-
-// "Ataque −1 · Conc +11" (los de ese momento) y abajo el tope ("tope −4 (INT)").
-function tradeDetail(c: MenuCtx, variant: string, weaponId: string, note?: string): MenuItem['detail'] {
+// El valor vive en la sesión. Cada toque de la fila resta 1 punto más al ataque (y lo suma a la Conc); después del
+// tope vuelve a 0. Los números salen siempre de computeSheet.
+function tradeItem(c: MenuCtx, variant: string, weaponId: string): MenuItem {
+  const trade = c.sheet.defensiveTrade
+  const value = trade?.value ?? 0
+  const max = trade?.max ?? 0
+  const next = value >= max ? 0 : value + 1
   const attack = c.sheet.attacks.find((a) => a.id === weaponId)?.variants.find((v) => v.id === variant)?.attack.total
   const conc = concFor(c, variant)?.total
   const sc = c.sheet.spellcasting[0]
-  const max = fill(c.t('play.tradeMax'), { max: sv(-(c.sheet.defensiveTrade?.max ?? 0)), ability: sc ? c.t(`ability.${sc.ability}`) : '' })
-  return {
-    title: c.t('play.trade'),
-    line: [attack === undefined ? '' : `${c.t('play.col.attack')} ${sv(attack)}`, conc === undefined ? '' : `${c.t('play.concShort')} ${sv(conc)}`].filter(Boolean).join(' · '),
-    note: max,
-    extra: note,
-  }
-}
-
-function tradeItem(c: MenuCtx, variant: string, weaponId: string): MenuItem {
   return {
     id: 'spell-combat-trade',
     label: c.t('play.trade'),
-    badge: { text: tradeText(c) },
-    detail: tradeDetail(c, variant, weaponId, c.t('play.tradeNote')),
-    action: { type: 'open', menu: `trade:${variant}:${weaponId}` },
+    badge: { text: value ? sv(-value) : '0', tone: value ? 'on' : 'muted' },
+    detail: {
+      title: c.t('play.trade'),
+      // "Ataque −1 · Conc +11" (los de ese momento)
+      line: [attack === undefined ? '' : `${c.t('play.col.attack')} ${sv(attack)}`, conc === undefined ? '' : `${c.t('play.concShort')} ${sv(conc)}`].filter(Boolean).join(' · '),
+      note: fill(c.t('play.tradeTap'), { max: sv(-max), ability: sc ? c.t(`ability.${sc.ability}`) : '' }),
+      extra: c.t('play.tradeNote'),
+    },
+    action: { type: 'toggle', on: next > 0, update: (s) => setSpellCombatTrade(c.sheet, s, next) },
   }
-}
-
-// Editor: una fila y la barra [✕] [−] [+] [LISTO]. + = cambiás 1 punto más.
-function tradeMenu(c: MenuCtx, variant: string, weaponId: string): MenuItem[] {
-  return [{
-    id: 'trade-value',
-    label: c.t('play.tradeChange'),
-    badge: { text: tradeText(c) },
-    detail: tradeDetail(c, variant, weaponId, c.t('play.tradePlus')),
-    action: { type: 'prepare' },
-  }]
 }
 
 // --- Menús ---
 
-// Menú principal: Ataques, Conjuros, Reserva arcana, Objetos y Estado. En combate, arriba va la fila de contexto
-// (Ronda sorpresa / ↻ Repetir), que siempre está, así la lista no cambia de largo y el cursor no salta.
-// Iniciar y terminar el combate están en el botón del HUD.
+// Menú principal: Combate con conjuros, Ataques, Conjuros, Reserva arcana, Objetos y Estado. Iniciar y terminar el
+// combate están en el botón del HUD.
 function root(c: MenuCtx): MenuItem[] {
   const { sheet, session, t: tr } = c
-  const items: MenuItem[] = session.combat ? [contextItem(c)] : []
+  const items: MenuItem[] = spellCombatRows(c)
   const main = sheet.attacks[0]
   const std = main?.variants[0]
   items.push({
@@ -356,7 +469,8 @@ function root(c: MenuCtx): MenuItem[] {
   return items
 }
 
-// Pestaña PERSONAJE: lo que no es pelear. Habilidades, Defensa, Preparar conjuros, Descansar y Libreta.
+// Pestaña PERSONAJE: lo que no es pelear, por cuánto se usa. (▲ Subir de nivel), Habilidades, Libreta, Descansar,
+// Preparar conjuros y Defensa.
 function character(c: MenuCtx): MenuItem[] {
   const { sheet, session, t: tr } = c
   // Vista previa del descanso: el mismo rest() del core sobre la sesión actual
@@ -370,20 +484,21 @@ function character(c: MenuCtx): MenuItem[] {
       .map((l) => `◆ ${slotsLeft(session, l)}→${slotsLeft(after, l)}`),
   ].join(' · ')
   return [
+    ...levelUpRow(c),
     { id: 'skills', label: tr('play.root.skills'), detail: { title: tr('play.root.skills'), line: fill(tr('play.skillsRanked'), { n: String(sheet.skills.filter((s) => s.ranks > 0).length) }), note: tr('play.skillsNote') }, action: { type: 'open', menu: 'skills' } },
+    ...(c.book
+      ? [{ id: 'notebook', label: tr('play.notebook'), detail: { title: tr('play.notebook'), line: tr('play.notebookNote') }, action: { type: 'open', menu: 'notebook' } } satisfies MenuItem]
+      : []),
+    { id: 'rest', label: tr('play.rest'), hold: true, act: 'downtime', detail: { title: tr('play.rest'), line: preview, note: tr('play.holdToRest') }, action: { type: 'rest' } },
+    ...(sheet.spellcasting[0]
+      ? [{ id: 'prepare', label: tr('play.prepare'), detail: { title: tr('play.prepare'), line: tr('play.prepareNote') }, act: 'downtime', action: { type: 'open', menu: 'prepare' } } satisfies MenuItem]
+      : []),
     {
       id: 'defense',
       label: tr('play.defense'),
       detail: { title: tr('play.defense'), line: `${tr('sheet.ac')} ${sheet.ac.normal.total} · ${tr('sheet.touch')} ${sheet.ac.touch.total} · ${tr('sheet.flatFooted')} ${sheet.ac.flatFooted.total}`, note: `${tr('sheet.cmd')} ${sheet.cmd.total} · ${tr('sheet.fort')} ${sv(sheet.saves.fort.total)} · ${tr('sheet.ref')} ${sv(sheet.saves.ref.total)} · ${tr('sheet.will')} ${sv(sheet.saves.will.total)}` },
       action: { type: 'open', menu: 'defense' },
     },
-    ...(sheet.spellcasting[0]
-      ? [{ id: 'prepare', label: tr('play.prepare'), detail: { title: tr('play.prepare'), line: tr('play.prepareNote') }, act: 'downtime', action: { type: 'open', menu: 'prepare' } } satisfies MenuItem]
-      : []),
-    { id: 'rest', label: tr('play.rest'), hold: true, act: 'downtime', detail: { title: tr('play.rest'), line: preview, note: tr('play.holdToRest') }, action: { type: 'rest' } },
-    ...(c.book
-      ? [{ id: 'notebook', label: tr('play.notebook'), detail: { title: tr('play.notebook'), line: tr('play.notebookNote') }, action: { type: 'open', menu: 'notebook' } } satisfies MenuItem]
-      : []),
   ]
 }
 
@@ -436,33 +551,6 @@ function itemsRow(c: MenuCtx): MenuItem {
   }
 }
 
-// Fila de contexto del menú principal, en combate: ↻ la última acción hecha en este combate; si no hay, en la
-// ronda 0 Ronda sorpresa y después "↻ Repetir" apagada.
-function contextItem(c: MenuCtx): MenuItem {
-  const { t: tr } = c
-  // En la ronda 0 solo se actúa en una sorpresa, con una sola acción: Repetir no sirve. La fila es Ronda sorpresa
-  // (ON/OFF) aunque ya hayas actuado, así se puede marcar o apagar hasta NUEVO TURNO.
-  const surprise = surpriseItem(c)
-  if (surprise) return surprise
-  const repeat = repeatItem(c)
-  if (repeat) return repeat
-  return blockItem({ id: 'repeat', label: `↻ ${tr('play.repeat')}`, detail: { title: tr('play.repeat') }, action: { type: 'none' } }, tr('play.repeatNone'))
-}
-
-// ↻ Repetir: la misma fila de la última acción, armada de nuevo (con los números de ahora). Se arma sin gate:
-// el gate del menú principal la apaga o le cobra el PG una sola vez. Si hoy no se puede (sin usos, sin ⚡), va apagada.
-function repeatItem(c: MenuCtx): MenuItem | null {
-  const last = c.session.lastAction
-  if (!last) return null
-  const orig = rawMenu(last.menu, c).find((it) => it.id === last.item)
-  if (!orig) return null
-  const [kind, actionId = ''] = last.menu.split(':')
-  const act = kind === 'spell-attack' ? c.sheet.actions.find((x) => x.id === actionId) : undefined
-  const prefix = act ? `${localName(act.id, act.name)} · ` : ''
-  const item: MenuItem = { ...orig, id: 'repeat', label: `↻ ${prefix}${orig.label}`, section: undefined, origin: last }
-  return orig.action.type === 'execute' || orig.blocked ? item : blockItem(item, c.t('play.repeatUnavailable'))
-}
-
 function statusDetail(c: MenuCtx): MenuItem['detail'] {
   const { sheet, session } = c
   return {
@@ -478,12 +566,20 @@ function attack(c: MenuCtx): MenuItem[] {
   const held = session.held
   if (held) {
     const touch = sheet.touch.standard
+    // Con Impacto con conjuro, la carga se descarga con un ataque del arma
+    const strike = spellstrikeFits(c, held.name) ? strikeGroup(c, held.name, 'standard') : null
+    const strikeRoll = strike ? strikeWeapon(c, 'standard')?.v.attack.total : undefined
     items.push({
       id: 'discharge',
       label: `${tr('play.discharge')} (${localSpell(held.name)})`,
-      badge: { text: touch ? sv(touch.melee.total) : '' },
+      badge: { text: strikeRoll !== undefined ? sv(strikeRoll) : touch ? sv(touch.melee.total) : '' },
       spell: { level: held.level, name: held.name },
-      detail: { title: `${localSpell(held.name)}${held.charges > 1 ? ` ×${held.charges}` : ''}`, line: spellEffect(c, held.name, 'standard'), note: tr('play.dischargeNote') },
+      detail: {
+        title: `${localSpell(held.name)}${held.charges > 1 ? ` ×${held.charges}` : ''}`,
+        line: aooTag(tr, BASIC_ACTIONS.discharge),
+        note: tr('play.dischargeNote'),
+        steps: strike ? [strike] : [{ lines: [touchStep(c, held.name, 'standard')].filter((x): x is DetailStep => Boolean(x)) }],
+      },
       // 'discharge': ¿Le pegaste? es la acción estándar (después de lanzar se llega con la variante, sin acción nueva)
       action: { type: 'open', menu: 'touch:discharge' },
       // el act de Descargar toque va en Le pegué / Erré (touchMenu), que es donde se hace
@@ -493,12 +589,11 @@ function attack(c: MenuCtx): MenuItem[] {
     const std = a.variants.find((v) => v.id === 'standard')
     if (!std) continue
     const suffix = sheet.attacks.length > 1 ? ` (${localName(a.id, a.name)})` : ''
-    const dmg = minus(std.damageText)
     items.push({
       id: `attack-${a.id}`,
       label: tr('play.attack') + suffix,
       badge: { text: sv(std.attack.total) },
-      detail: { title: localName(a.id, a.name), tag: actionTag(tr, BASIC_ACTIONS.attack), stats: weaponStats(tr, a, std) },
+      detail: { title: localName(a.id, a.name), line: actionTag(tr, BASIC_ACTIONS.attack), steps: [{ lines: weaponSteps(tr, a, std) }] },
       act: BASIC_ACTIONS.attack,
       offensive: true,
       action: { type: 'execute', fx: 'actionExecute', after: 'root' },
@@ -509,29 +604,16 @@ function attack(c: MenuCtx): MenuItem[] {
         id: `full-attack-${a.id}`,
         label: tr('play.fullAttack') + suffix,
         badge: { text: std.fullAttack.map(sv).join('/') },
-        detail: { title: localName(a.id, a.name), tag: actionTag(tr, BASIC_ACTIONS['full-attack']), stats: weaponStats(tr, a, std, std.fullAttack.map(sv).join('/')) },
+        detail: { title: localName(a.id, a.name), line: actionTag(tr, BASIC_ACTIONS['full-attack']), steps: [{ lines: weaponSteps(tr, a, std, std.fullAttack) }] },
         act: BASIC_ACTIONS['full-attack'],
         offensive: true,
         action: { type: 'execute', fx: 'actionExecute', after: 'root' },
       })
     }
-    for (const act of sheet.actions.filter((x) => x.menu === 'attack' && x.kind === 'spell-attack')) {
-      const v = a.variants.find((x) => x.id === act.variant)
-      if (!v) continue
-      items.push({
-        id: `${act.id}-${a.id}`,
-        label: localName(act.id, act.name) + suffix,
-        badge: { text: `${sv(v.attack.total)} +◆` },
-        // Provoca por el conjuro (salvo a la defensiva); el de un toque a distancia se ve al elegir el conjuro
-        detail: { title: `${localName(act.id, act.name)} · ${localName(a.id, a.name)}`, tag: spellAoOTag(tr, act.actionType, spellAoO(undefined, session.castDefensively)), stats: weaponStats(tr, a, v), line: actionNoteLabel(tr, act.id) || undefined, note: variantAttackNote(c, std, v) },
-        act: act.actionType,
-        action: { type: 'open', menu: `spell-attack:${act.id}:${a.id}` },
-      })
-    }
     const chargeAttack = std.attack.conditional.find((x) => x.condition === 'charge')
     const chargeAc = sheet.ac.normal.conditional.find((x) => x.condition === 'charge')
     if (chargeAttack && a.category !== 'ranged') {
-      // En un turno restringido (incapacitado, ronda sorpresa) es estándar y llega hasta la velocidad (core: chargeKind).
+      // En un turno restringido (incapacitado, tambaleante) es estándar y llega hasta la velocidad (core: chargeKind).
       const kind = chargeKind(sheet, session)
       const item: MenuItem = {
         id: `charge-${a.id}`,
@@ -539,13 +621,10 @@ function attack(c: MenuCtx): MenuItem[] {
         badge: { text: sv(chargeAttack.total) },
         detail: {
           title: tr('play.charge'),
-          tag: actionTag(tr, kind),
-          stats: [
-            { id: 'attack', label: tr('play.col.attack'), value: sv(chargeAttack.total) },
-            { id: 'damage', label: tr('play.col.damage'), value: dmg },
-          ],
-          line: `${tr('sheet.ac')} ${chargeAc?.total ?? sheet.ac.normal.total} ${tr('play.untilYourTurn')}`,
-          note: tr('play.chargeDistance').replace('{n}', String(chargeDistance(sheet, session))),
+          line: actionTag(tr, kind),
+          note: fill(tr('play.chargeDistance'), { n: String(chargeDistance(sheet, session)) }),
+          extra: `${tr('sheet.ac')} ${chargeAc?.total ?? sheet.ac.normal.total} ${tr('play.untilYourTurn')}`,
+          steps: [{ lines: weaponSteps(tr, a, std, [chargeAttack.total]) }],
         },
         act: kind,
         offensive: true,
@@ -562,37 +641,73 @@ function attack(c: MenuCtx): MenuItem[] {
     badge: { text: `${tr('sheet.cmb')} ${sv(sheet.cmb.total)}` },
     detail: {
       title: tr('play.maneuver'),
-      tag: aooTag(tr, BASIC_ACTIONS.maneuver, BASIC_AOO.maneuver),
-      stats: [
-        { id: 'cmb', label: tr('sheet.cmb'), value: sv(sheet.cmb.total) },
-        { id: 'cmd', label: tr('sheet.cmd'), value: String(sheet.cmd.total) },
-      ],
+      line: aooTag(tr, BASIC_ACTIONS.maneuver, BASIC_AOO.maneuver),
+      note: fill(tr('play.yourCmd'), { n: String(sheet.cmd.total) }),
+      steps: [{ lines: [{ roll: sv(sheet.cmb.total), text: tr('play.step.cmb') }] }],
     },
     act: BASIC_ACTIONS.maneuver,
     offensive: true,
     action: { type: 'execute', fx: 'actionExecute', after: 'root' },
   })
-  // Preparar una acción: queda anotada (chip) hasta que actuás o hasta NUEVO TURNO (core: ready / afterAction / nextTurn)
-  items.push({
-    id: 'ready',
-    label: tr('play.ready'),
-    badge: session.readied ? onOff(true) : undefined,
-    detail: { title: tr('play.ready'), tag: actionTag(tr, BASIC_ACTIONS.ready), line: tr('play.readyNote'), note: session.readied ? tr('play.readyOn') : undefined },
-    act: BASIC_ACTIONS.ready,
-    action: { type: 'execute', fx: 'actionExecute', noAnim: true, update: ready, after: 'root' },
-  })
-  ;(Object.keys(STANCES) as StanceId[]).forEach((id, i) => {
+  // Modos, abajo: Ataque poderoso y las posturas, todos ON/OFF (prender una postura apaga la otra: core toggleStance)
+  const modes = items.length
+  // Ataque poderoso: ON/OFF que queda hasta apagarlo. Los números salen de la ficha (prendido o como condicional).
+  const pa = sheet.feats.find((f) => f.id === 'power-attack' && f.known)
+  const melee = sheet.attacks.find((a) => a.category !== 'ranged')?.variants.find((v) => v.id === 'standard')
+  if (pa && melee) {
+    const paValue = (st: Stat) =>
+      [...st.applied, ...st.conditional.flatMap((x) => x.modifiers)].find((m) => m.source === pa.name)?.value ?? 0
+    const on = session.powerAttack
+    items.push({
+      id: 'power-attack',
+      label: tr('play.powerAttack'),
+      badge: onOff(on),
+      detail: {
+        title: tr('play.powerAttack'),
+        line: `${tr('play.col.attack')} ${sv(paValue(melee.attack))} · ${tr('play.col.damage')} ${sv(paValue(melee.damage))}`,
+        note: tr('play.powerAttackNote'),
+      },
+      action: { type: 'toggle', on: !on, update: togglePowerAttack },
+    })
+  }
+  ;(Object.keys(STANCES) as StanceId[]).forEach((id) => {
     const on = session.stance === id
     items.push({
       id: `stance-${id}`,
       label: tr(`stance.${id}`),
-      section: i === 0 ? tr('play.stance') : undefined,
       badge: onOff(on),
       detail: { title: tr(`stance.${id}`), line: tr(`stanceNote.${id}`), note: `${tr('sheet.ac')} ${sheet.ac.normal.total}` },
       action: { type: 'toggle', on: !on, update: (s) => toggleStance(s, id) },
     })
   })
+  const firstMode = items[modes]
+  if (firstMode) items[modes] = { ...firstMode, section: tr('play.modes') }
   return items
+}
+
+// Combate con conjuros (las acciones de clase que lanzan con el arma): primeras en Pelea, con la primera arma cuerpo a
+// cuerpo. Abren la lista de conjuros de esa variante.
+function spellCombatRows(c: MenuCtx): MenuItem[] {
+  const { sheet, session, t: tr } = c
+  const a = sheet.attacks.find((x) => x.category !== 'ranged')
+  const std = a?.variants.find((v) => v.id === 'standard')
+  if (!a || !std) return []
+  return sheet.actions
+    .filter((x) => x.menu === 'attack' && x.kind === 'spell-attack')
+    .flatMap((act): MenuItem[] => {
+      const v = a.variants.find((x) => x.id === act.variant)
+      if (!v) return []
+      return [{
+        id: `${act.id}-${a.id}`,
+        label: localName(act.id, act.name),
+        badge: { text: `${sv(v.attack.total)} +◆` },
+        // Provoca por el conjuro (salvo a la defensiva); el de un toque a distancia se ve al elegir el conjuro
+        // El desglose del ataque (lo que resta la variante) va en la tarjeta ⓘ
+        detail: { title: `${localName(act.id, act.name)} · ${localName(a.id, a.name)}`, tag: spellAoOTag(tr, act.actionType, spellAoO(undefined, session.castDefensively)), stats: weaponStats(tr, a, v), line: actionNoteLabel(tr, act.id) || undefined, parts: partsOf(statRows(tr, v.attack, false, (s) => localSource(s))) },
+        act: act.actionType,
+        action: { type: 'open', menu: `spell-attack:${act.id}:${a.id}` },
+      }]
+    })
 }
 
 function spellAttack(c: MenuCtx, actionId: string, weaponId: string): MenuItem[] {
@@ -600,21 +715,24 @@ function spellAttack(c: MenuCtx, actionId: string, weaponId: string): MenuItem[]
   const weapon = c.sheet.attacks.find((a) => a.id === weaponId)
   const v = weapon?.variants.find((x) => x.id === act?.variant)
   if (!act || !weapon || !v) return []
-  return castableItems(c, { title: `${localName(act.id, act.name)} · ${localName(weapon.id, weapon.name)}`, stats: weaponStats(c.t, weapon, v), variant: v.id, kind: act.actionType, weaponId: weapon.id })
+  const weaponName = localName(weapon.id, weapon.name)
+  return castableItems(c, { weapon: weaponName, variant: v.id, kind: act.actionType, weaponId: weapon.id })
 }
 
 // ¿Pegó? (después de lanzar un conjuro de toque o de Descargar toque)
 function touchMenu(c: MenuCtx, variant: string, weaponId: string): MenuItem[] {
   const held = c.session.held
   if (!held) return []
-  const title = `${localSpell(held.name)} · ${touchText(c, held.name, variant)}`
-  const line = spellDamage(c, held.name) || spellSummary(c, held.name)
-  // Con Combate con conjuros, el ataque con el arma que sigue al toque (mismos números que weaponStats)
+  const title = localSpell(held.name)
+  // El toque (o, con Impacto, el ataque del arma con el conjuro) y, con Combate con conjuros, el ataque con el arma que sigue
+  const strike = spellstrikeFits(c, held.name) ? strikeGroup(c, held.name, variant) : null
+  const touch = strike ? null : touchStep(c, held.name, variant)
   const weapon = weaponId ? c.sheet.attacks.find((a) => a.id === weaponId) : undefined
   const wv = weapon?.variants.find((x) => x.id === variant)
-  const extra = weapon && wv
-    ? `${c.t('play.thenWeapon')}: ${localName(weapon.id, weapon.name)} ${sv(wv.attack.total)} · ${minus(wv.damageText)} · ${prettyCrit(weapon.critical)}`
-    : undefined
+  const steps: DetailSteps[] = [
+    ...(strike ? [strike] : touch ? [{ lines: [touch] }] : []),
+    ...(weapon && wv ? [{ title: localName(weapon.id, weapon.name), lines: weaponSteps(c.t, weapon, wv) }] : []),
+  ]
   // Descargar toque es una acción estándar (cuenta para el incapacitado, gate); después de lanzar, el conjuro ya contó
   // (por eso Le pegué / Erré no se bloquean aunque el −1 del incapacitado lo haya dejado moribundo: es el mismo lanzamiento).
   const act = variant === 'discharge' ? BASIC_ACTIONS.discharge : undefined
@@ -623,7 +741,7 @@ function touchMenu(c: MenuCtx, variant: string, weaponId: string): MenuItem[] {
       id: 'touch-hit',
       label: c.t('play.hit'),
       spell: { level: held.level, name: held.name },
-      detail: { title, line, note: held.charges > 1 ? `${c.t('play.chargesLeft')}: ${held.charges - 1}` : undefined, extra },
+      detail: { title, note: held.charges > 1 ? `${c.t('play.chargesLeft')}: ${held.charges - 1}` : undefined, steps },
       act,
       offensive: true,
       action: { type: 'execute', fx: 'actionExecute', update: touchHit, after: 'root' },
@@ -632,7 +750,7 @@ function touchMenu(c: MenuCtx, variant: string, weaponId: string): MenuItem[] {
       id: 'touch-miss',
       label: c.t('play.miss'),
       spell: { level: held.level, name: held.name },
-      detail: { title, line, note: c.t('play.missNote'), extra },
+      detail: { title, note: c.t('play.missNote'), steps },
       act,
       offensive: true,
       action: { type: 'execute', fx: 'back', noAnim: true, after: 'root' },
@@ -645,13 +763,17 @@ function spellsMenu(c: MenuCtx): MenuItem[] {
   return castableItems(c)
 }
 
+// Preparar: el libro por nivel. Dentro de cada nivel, primero lo que ya tenías preparado (la sesión, no el borrador:
+// así el orden no salta mientras tocás − / +) y después el resto, en el orden del libro.
 function prepareMenu(c: MenuCtx): MenuItem[] {
   const { sheet, draft } = c
   return Object.keys(c.character.spellbook)
     .sort(byNumber)
     .filter((level) => slotsPerDay(sheet, level) > 0)
-    .flatMap((level) =>
-      (c.character.spellbook[level] ?? []).map((name, i): MenuItem => {
+    .flatMap((level) => {
+      const book = c.character.spellbook[level] ?? []
+      const had = (name: string) => timesPrepared(c.session, level, name) > 0
+      return [...book.filter(had), ...book.filter((name) => !had(name))].map((name, i): MenuItem => {
         const n = draft[level]?.[name] ?? 0
         const used = timesCast(c.session, level, name) // no se puede preparar menos (core: adjustPrepared / prepare)
         return {
@@ -659,7 +781,7 @@ function prepareMenu(c: MenuCtx): MenuItem[] {
           label: localSpell(name),
           section: i === 0 ? `${levelLabel(c.t, level)}   ${preparedTotal(draft, level)}/${slotsPerDay(sheet, level)}` : undefined,
           spell: { level, name },
-          badge: isCantrip(level) ? { text: n ? '✓' : '·', tone: n ? 'on' : 'muted' } : { text: `×${n}`, tone: n ? 'on' : 'muted' },
+          badge: { text: `×${n}`, tone: n ? 'on' : 'muted' },
           detail: {
             title: localSpell(name),
             line: spellHead(c, level, name),
@@ -668,8 +790,8 @@ function prepareMenu(c: MenuCtx): MenuItem[] {
           },
           action: { type: 'prepare' },
         }
-      }),
-    )
+      })
+    })
 }
 
 function poolMenu(c: MenuCtx, resource: string): MenuItem[] {
@@ -744,13 +866,17 @@ function recallMenu(c: MenuCtx, resource: string): MenuItem[] {
     )
 }
 
+// Habilidades: primero las de clase y después las otras, cada una con su atributo (apagado) y el total.
 function skills(c: MenuCtx): MenuItem[] {
   const { sheet, t: tr } = c
-  const list = sheet.skills.filter((s) => (c.showAllSkills ? s.usable : s.ranks > 0))
+  const shown = sheet.skills.filter((s) => (c.showAllSkills ? s.usable : s.ranks > 0))
+  const list = [...shown.filter((s) => s.classSkill), ...shown.filter((s) => !s.classSkill)]
   return [
-    ...list.map((s): MenuItem => ({
+    ...list.map((s, i): MenuItem => ({
       id: `skill-${s.id}`,
       label: localName(s.id, s.name),
+      section: i === 0 || s.classSkill !== list[i - 1]?.classSkill ? tr(s.classSkill ? 'play.skills.class' : 'play.skills.other') : undefined,
+      hint: tr(`ability.${s.ability}`),
       badge: { text: sv(s.stat.total) },
       detail: {
         title: localName(s.id, s.name),
@@ -835,10 +961,6 @@ function stateMenu(c: MenuCtx): MenuItem[] {
     const label = tr('play.charged')
     add({ id: 'effect-charge', label, detail: { title: label, line: `${tr('sheet.ac')} ${c.sheet.ac.normal.total} ${tr('play.untilYourTurn')}`, note: remove }, action: { type: 'toggle', on: false, update: endCharge } }, { kind: 'turn' })
   }
-  if (session.readied) {
-    const label = tr('play.readied')
-    add({ id: 'effect-readied', label, detail: { title: label, line: tr('play.readyNote'), note: remove }, action: { type: 'toggle', on: false, update: endReadied } }, { kind: 'turn' })
-  }
   if (session.stance && session.stance in STANCES) {
     const id = session.stance as StanceId
     add({ id: `effect-stance`, label: tr(`stance.${id}`), detail: { title: tr(`stance.${id}`), line: tr(`stanceNote.${id}`), note: remove }, action: { type: 'toggle', on: false, update: (s) => toggleStance(s, id) } }, { kind: 'turn' })
@@ -902,10 +1024,10 @@ function effectsAdd(c: MenuCtx): MenuItem[] {
     return {
       id: `common-${id}`,
       label: `${name}  ${modsText(tr, COMMON_EFFECTS[id])}`,
-      badge: check(on),
+      badge: onOff(on),
       detail: { title: name, line: modsText(tr, COMMON_EFFECTS[id], true), note: tr('play.untilCombatEnd') },
-      // Está 3 niveles adentro: al prenderlo o apagarlo vuelve al menú principal (como Libre › LISTO)
-      action: { type: 'toggle', on: !on, update: (s) => toggleCommonEffect(s, id), after: 'root' },
+      // Se queda en la lista: se prenden varios seguidos
+      action: { type: 'toggle', on: !on, update: (s) => toggleCommonEffect(s, id) },
     }
   })
   items.push({ id: 'free', label: tr('play.freeEffect'), detail: { title: tr('play.freeEffect'), line: tr('play.freeEffectNote') }, action: { type: 'open', menu: 'effect-free' } })
@@ -936,7 +1058,7 @@ const freePreview = (d: FreeDraft): ModifierInput[] =>
   (['attack', 'ac', 'damage', 'saves'] as const).filter((f) => d[f] !== 0).map((f) => ({ target: f, type: 'untyped', value: d[f] }))
 
 const activeCount = (s: Session) =>
-  s.buffs.length + (s.enhancement ? 1 : 0) + (s.held ? 1 : 0) + (s.castDefensively ? 1 : 0) + (s.stance ? 1 : 0) + (s.charging ? 1 : 0) + (s.readied ? 1 : 0) + s.external.length
+  s.buffs.length + (s.enhancement ? 1 : 0) + (s.held ? 1 : 0) + (s.castDefensively ? 1 : 0) + (s.stance ? 1 : 0) + (s.charging ? 1 : 0) + s.external.length
 
 // Rondas de cada buff prendido, por si se lanzó fuera de combate: Iniciar combate le pone el contador (core: startCombat).
 export function prebuffRounds(c: MenuCtx): Record<string, number> {
@@ -948,21 +1070,6 @@ export function prebuffRounds(c: MenuCtx): Record<string, number> {
   return rounds
 }
 
-// Ronda sorpresa: solo antes del primer NUEVO TURNO. Prendida, nada de ronda completa (core: actionLimit) y se apaga con NUEVO TURNO.
-function surpriseItem(c: MenuCtx): MenuItem | null {
-  const { sheet, session, t: tr } = c
-  if (session.combat?.round !== 0) return null
-  const on = session.surprise
-  return {
-    id: 'surprise',
-    label: tr('play.surprise'),
-    badge: onOff(on),
-    // Es lo primero que se ve al iniciar el combate: también lleva la iniciativa y cómo se usa el botón del HUD
-    detail: { title: tr('play.surprise'), line: tr('play.surpriseNote'), note: `${tr('play.rollInit')} ${sv(sheet.initiative.total)}`, extra: tr('play.combatHint') },
-    action: { type: 'toggle', on: !on, update: toggleSurprise },
-  }
-}
-
 function conditions(c: MenuCtx): MenuItem[] {
   return (Object.keys(CONDITIONS) as ConditionId[]).map((id): MenuItem => {
     const on = c.session.conditions.includes(id)
@@ -972,7 +1079,7 @@ function conditions(c: MenuCtx): MenuItem[] {
     return {
       id: `condition-${id}`,
       label: localName(id, capitalize(id)),
-      badge: check(on),
+      badge: onOff(on),
       detail: { title: localName(id, capitalize(id)), line: proneLine ?? c.t(`conditionNote.${id}`), note: id === 'prone' ? c.t('play.proneStand') : undefined, extra: id === 'prone' ? c.t('play.proneCrawl') : undefined },
       action: { type: 'toggle', on: !on, update: (s) => toggleCondition(s, id) },
     }
@@ -1008,7 +1115,7 @@ export function buildMenu(id: string, c: MenuCtx): MenuItem[] {
   // Una lista vacía igual tiene una fila, para que el cursor y el detalle tengan algo que mostrar
   if (!items.length) return [withNav({ id: 'empty', label: c.t('play.empty'), detail: { title: c.t('play.empty') }, action: { type: 'none' } })]
   const gated = gate(items, c).map(withNav)
-  // En combate, lo urgente va primero en el detalle de la fila de contexto (↻ Repetir o Ronda sorpresa)
+  // En combate, lo urgente va en el detalle de la primera fila (Ataques): es la del cursor con NUEVO TURNO
   const urgent = id === 'root' && c.session.combat ? urgentWarn(c) : undefined
   const first = gated[0]
   if (urgent && first) gated[0] = { ...first, detail: { ...first.detail, warn: [urgent, first.detail.warn].filter(Boolean).join(' · ') } }
@@ -1022,7 +1129,7 @@ function withNav(it: MenuItem): MenuItem {
   return it
 }
 
-// Las filas de un menú, sin gate ni señalización (la fila Repetir copia una de acá).
+// Las filas de un menú, sin gate ni señalización.
 function rawMenu(id: string, c: MenuCtx): MenuItem[] {
   const [kind, a = '', b = ''] = id.split(':')
   let items: MenuItem[]
@@ -1043,7 +1150,6 @@ function rawMenu(id: string, c: MenuCtx): MenuItem[] {
     case 'conditions': items = conditions(c); break
     case 'effects-add': items = effectsAdd(c); break
     case 'effect-free': items = effectFree(c); break
-    case 'trade': items = tradeMenu(c, a, b); break
     case 'ability-damage': items = abilityDamageMenu(c); break
     case 'notebook':
     case 'inventory':
@@ -1051,6 +1157,10 @@ function rawMenu(id: string, c: MenuCtx): MenuItem[] {
     case 'qty':
     case 'purse':
     case 'backup': items = bookMenu(kind, c, a); break
+    case 'levelup':
+    case 'levelup-ranks':
+    case 'levelup-spells':
+    case 'levelup-feat': items = levelUpMenu(kind, c); break
     case 'value': items = valueMenu(c, a as ValueKind); break
     case 'death': items = death(c); break
     default: items = []
@@ -1074,12 +1184,12 @@ function urgentWarn(c: MenuCtx): string | undefined {
 }
 const fill = (text: string, vars: Record<string, string>) => Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), text)
 
-// PG bajos y ronda sorpresa. La regla vive en core/session.ts (checkAction / applyAction); acá solo se apaga la fila
+// PG bajos y turno restringido. La regla vive en core/session.ts (checkAction / applyAction); acá solo se apaga la fila
 // y va el aviso:
 //   moribundo      → se bloquea toda acción (act, incluidos Descansar y Preparar) y los menús que abren acciones;
 //   incapacitado   → se bloquea lo de ronda completa; lo estándar se puede, con el aviso, y al hacerlo resta 1 PG solo
 //                    (pasa a moribundo). NUEVO TURNO no resta: la tirada de estabilización del moribundo es manual;
-//   ronda sorpresa → se bloquea lo de ronda completa, sin costo.
+//   tambaleante    → se bloquea lo de ronda completa, sin costo.
 // Quedan Personaje (habilidades para mirar, condiciones, efectos), Terminar combate y los PG del HUD.
 // Una fila que ya viene bloqueada (ej. Cargar enredado) conserva su aviso, salvo con moribundo.
 // Menús que abren listas de acciones: con moribundo se apagan enteros (es navegación: adentro todo estaría bloqueado).
@@ -1090,7 +1200,7 @@ const blockItem = (it: MenuItem, warn: string): MenuItem => ({ ...it, blocked: t
 
 const BLOCK_WARN = {
   dying: 'play.dyingBlock', stunned: 'play.stunnedBlock', nauseated: 'play.nauseatedBlock',
-  'disabled-full': 'play.disabledFull', 'staggered-full': 'play.staggeredFull', 'surprise-full': 'play.surpriseFull',
+  'disabled-full': 'play.disabledFull', 'staggered-full': 'play.staggeredFull',
 } as const
 
 function gate(items: MenuItem[], c: MenuCtx): MenuItem[] {

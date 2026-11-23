@@ -132,7 +132,7 @@ export function Hud({ onTurn, onCombatStart, onCombatEnd, healRequest = 0 }: { o
   const chips = [
     ...(session.stance && session.stance in STANCES ? [{ id: session.stance, text: t(`stanceChip.${session.stance as StanceId}`) }] : []),
     ...(session.charging ? [{ id: 'charged', text: t('play.chip.charged') }] : []),
-    ...(session.readied ? [{ id: 'readied', text: t('play.chip.readied') }] : []),
+    ...(session.powerAttack ? [{ id: 'power-attack', text: t('play.chip.powerAttack') }] : []),
     ...(session.enhancement ? [{ id: 'enhancement', text: `${t('play.chip.weapon')} +${session.enhancement.bonus}${rounds(session.enhancement.rounds)}` }] : []),
     ...session.conditions.map((c) => ({ id: c, text: localName(c, c.charAt(0).toUpperCase() + c.slice(1)) })),
     ...session.buffs.map((b) => ({ id: `buff-${b}`, text: `${localBuff(b)}${rounds(session.buffRounds[b])}` })),

@@ -25,6 +25,8 @@ export const sessionSchema = z.object({
   enhancement: z.object({ weaponId: z.string(), bonus: z.number().int().positive(), rounds: z.number().int().positive().optional() }).nullable().default(null),
   itemsUsed: z.record(z.string(), z.number().int().nonnegative()).default({}),
   castDefensively: z.boolean().default(false),
+  spellstrike: z.boolean().default(false), // Impacto con conjuro: los conjuros de toque van con un ataque del arma (queda hasta apagarlo)
+  powerAttack: z.boolean().default(false), // Ataque poderoso: queda prendido hasta que lo apagues (activa 'power-attack')
   // Combate con conjuros a la defensiva: puntos de ataque cambiados por concentración (el tope lo pone computeSheet)
   spellCombatTrade: z.number().int().nonnegative().default(0),
   // Conjuro de toque con carga en la mano (Shocking Grasp: 1; Frostbite: 1 por nivel). Se gasta al pegar.
@@ -38,11 +40,7 @@ export const sessionSchema = z.object({
     .default([]),
   // Modo combate: round 0 = arrancó el combate pero todavía no te tocó. Se avanza con NUEVO TURNO.
   combat: z.object({ round: z.number().int().nonnegative() }).nullable().default(null),
-  surprise: z.boolean().default(false), // ronda sorpresa: hasta el primer NUEVO TURNO, solo una acción estándar o de movimiento
-  // Última acción del turno hecha en este combate (menú + fila), para repetirla desde el menú principal
-  lastAction: z.object({ menu: z.string(), item: z.string() }).nullable().default(null),
   charging: z.boolean().default(false), // cargaste: −2 CA hasta tu próximo turno
-  readied: z.boolean().default(false), // preparaste una acción: dura hasta que actuás o hasta tu próximo turno
   beforeDeath: z.number().int().nonnegative().nullable().default(null), // `damage` de antes del golpe que lo mató (para "Me equivoqué")
   tempHp: z.number().int().nonnegative().default(0), // PG temporales: el daño los gasta primero
   nonlethal: z.number().int().nonnegative().default(0),
@@ -253,7 +251,7 @@ export function toSessionContext(s: Session, buffMods: Readonly<Record<string, r
       ...s.external.flatMap((e) => withSource(e.mods, e.id)),
       ...Object.entries(s.abilityDamage).flatMap(([a, n]) => withSource([{ target: `ability.${a as Ability}`, type: 'untyped', value: -n }], 'ability-damage')),
     ],
-    conditions: s.castDefensively ? [...s.conditions, 'casting-defensively'] : s.conditions,
+    conditions: [...s.conditions, ...(s.castDefensively ? ['casting-defensively'] : []), ...(s.powerAttack ? ['power-attack'] : [])],
     loseDexToAc: s.conditions.some((c) => (LOSE_DEX_AC as readonly string[]).includes(c)),
     // El cambio de ataque por concentración solo vale a la defensiva
     defensiveTrade: s.castDefensively ? s.spellCombatTrade : 0,
@@ -313,23 +311,23 @@ export function hpState(sheet: ComputedSheet, s: Session): HpState {
 // Qué acciones le quedan (PF1e):
 //   'any'    en pie;
 //   'single' turno restringido: una sola acción estándar o de movimiento, nada de ronda completa.
-//            Incapacitado (0 PG; la estándar le saca 1 PG después), ronda sorpresa o tambaleante (sin costo);
+//            Incapacitado (0 PG; la estándar le saca 1 PG después) o tambaleante (sin costo);
 //   'none'   moribundo: inconsciente, sin acciones.
 // Muerto tiene su propia pantalla.
 export type ActionLimit = 'any' | 'single' | 'none'
 export function actionLimit(sheet: ComputedSheet, s: Session): ActionLimit {
   const state = hpState(sheet, s)
   if (state === 'dying') return 'none'
-  return state === 'disabled' || (s.surprise && s.combat) || s.conditions.includes('staggered') ? 'single' : 'any'
+  return state === 'disabled' || s.conditions.includes('staggered') ? 'single' : 'any'
 }
 
 // ¿Se puede hacer una acción de ese tipo?
 //   moribundo     → nada;
 //   incapacitado  → nada de ronda completa; lo estándar se puede y cuesta 1 PG (después de hacerlo);
 //                   lo rápido y lo de fuera del turno (Descansar, Preparar) se puede sin costo;
-//   ronda sorpresa → nada de ronda completa, sin costo.
+//   tambaleante   → nada de ronda completa, sin costo.
 // heals: la acción cura (una poción); a 0 PG no cuesta el PG, porque te deja con más.
-export type ActionCheck = { allowed: false; reason: 'dying' | 'stunned' | 'nauseated' | 'disabled-full' | 'staggered-full' | 'surprise-full' } | { allowed: true; hpCost: 0 | 1 }
+export type ActionCheck = { allowed: false; reason: 'dying' | 'stunned' | 'nauseated' | 'disabled-full' | 'staggered-full' } | { allowed: true; hpCost: 0 | 1 }
 export function checkAction(sheet: ComputedSheet, s: Session, kind: ActionKind, heals = false): ActionCheck {
   const limit = actionLimit(sheet, s)
   const disabled = hpState(sheet, s) === 'disabled'
@@ -337,7 +335,7 @@ export function checkAction(sheet: ComputedSheet, s: Session, kind: ActionKind, 
   const stopped = NO_ACTIONS.find((c) => s.conditions.includes(c))
   if (stopped && kind !== 'downtime') return { allowed: false, reason: stopped === 'stunned' ? 'stunned' : 'nauseated' }
   if (limit === 'single' && kind === 'full') {
-    return { allowed: false, reason: disabled ? 'disabled-full' : s.conditions.includes('staggered') ? 'staggered-full' : 'surprise-full' }
+    return { allowed: false, reason: disabled ? 'disabled-full' : 'staggered-full' }
   }
   return { allowed: true, hpCost: disabled && kind === 'standard' && !heals ? 1 : 0 }
 }
@@ -349,7 +347,7 @@ export function currentSpeed(sheet: ComputedSheet, s: Session): number {
   return s.conditions.some((c) => (HALF_SPEED as readonly string[]).includes(c)) ? Math.floor(speed / 10) * 5 : speed
 }
 
-// Carga: ronda completa, hasta el doble de la velocidad. En un turno restringido (incapacitado, ronda sorpresa)
+// Carga: ronda completa, hasta el doble de la velocidad. En un turno restringido (incapacitado, tambaleante)
 // es una acción estándar y llega hasta la velocidad.
 export const chargeKind = (sheet: ComputedSheet, s: Session): ActionKind => (actionLimit(sheet, s) === 'single' ? 'standard' : 'full')
 export function chargeDistance(sheet: ComputedSheet, s: Session): number {
@@ -393,12 +391,10 @@ export function revive(sheet: ComputedSheet, s: Session): Session {
     buffRounds: {},
     external: [],
     castDefensively: false,
+    spellstrike: false,
     spellCombatTrade: 0,
     combat: null,
-    surprise: false,
-    lastAction: null,
     charging: false,
-    readied: false,
   }
 }
 
@@ -447,7 +443,7 @@ export interface CastInfo {
 
 // Los datos de un conjuro que usan las reglas de la sesión (src/data/spells.ts → SpellDef tiene esta forma; core no importa src/data).
 export interface SpellCastRules {
-  castingTime: 'standard' | 'round'
+  castingTime: 'standard' | 'round' | 'swift' | 'immediate'
   attack?: 'melee-touch' | 'ranged-touch'
   charges?: 'one' | 'perLevel'
   buff?: readonly unknown[]
@@ -463,10 +459,12 @@ export function castInfoFor(def: SpellCastRules | undefined, casterLevel: number
   }
 }
 
-// Tipo de acción al lanzar: un conjuro de 1 ronda es de ronda completa; si se lanza con una acción de clase
-// (Spell Combat, Spellstrike), manda el tipo de esa acción.
+// Tipo de acción al lanzar: un conjuro de 1 ronda es de ronda completa; uno rápido o inmediato, acción rápida (la
+// inmediata usa la rápida del turno); si no, si se lanza con una acción de clase (Spell Combat), manda esa acción.
 export function spellActionKind(def: SpellCastRules | undefined, classAction?: ActionKind): ActionKind {
-  return def?.castingTime === 'round' ? 'full' : (classAction ?? 'standard')
+  if (def?.castingTime === 'round') return 'full'
+  if (def?.castingTime === 'swift' || def?.castingTime === 'immediate') return 'swift'
+  return classAction ?? 'standard'
 }
 
 // Los trucos no gastan nada. Lanzar otro conjuro disipa la carga que tenías en la mano (PF1e).
@@ -489,6 +487,7 @@ export const dropHeld = (s: Session): Session => ({ ...s, held: null })
 export const endBuff = (s: Session, spell: string): Session => ({ ...s, buffs: s.buffs.filter((b) => b !== spell), buffRounds: omit(s.buffRounds, spell) })
 // Al apagar la defensiva, el cambio de ataque por concentración vuelve a 0.
 export const toggleDefensive = (s: Session): Session => ({ ...s, castDefensively: !s.castDefensively, spellCombatTrade: 0 })
+export const toggleSpellstrike = (s: Session): Session => ({ ...s, spellstrike: !s.spellstrike })
 // Cambio de ataque por concentración, entre 0 y el tope de la ficha.
 export const setSpellCombatTrade = (sheet: ComputedSheet, s: Session, value: number): Session =>
   ({ ...s, spellCombatTrade: Math.max(0, Math.min(sheet.defensiveTrade?.max ?? 0, value)) })
@@ -527,7 +526,9 @@ export function prepare(sheet: ComputedSheet, s: Session, prepared: SpellCounts)
 }
 
 // --- Posturas, condiciones, mejora del arma, objetos ---
-export const toggleStance = (s: Session, id: StanceId): Session => ({ ...s, stance: s.stance === id ? null : id })
+export const togglePowerAttack = (s: Session): Session => ({ ...s, powerAttack: !s.powerAttack })
+
+export const toggleStance =(s: Session, id: StanceId): Session => ({ ...s, stance: s.stance === id ? null : id })
 
 export const toggleCondition = (s: Session, id: ConditionId): Session => ({
   ...s,
@@ -584,20 +585,13 @@ export function applyItem(character: Character, s: Session, itemId: string, rule
   return { ...used, buffs, buffRounds }
 }
 
-// Preparar una acción: queda anotada hasta que actuás (afterAction) o hasta tu próximo turno (nextTurn).
-export const ready = (s: Session): Session => ({ ...s, readied: true })
-export const endReadied = (s: Session): Session => ({ ...s, readied: false })
-
-// Después de una acción del turno: la acción preparada ya se usó (pasó lo que esperabas y actuaste) y, si fue
-// ofensiva (atacar, o lanzar sobre alguien), se cortan los efectos que terminan al atacar (la invisibilidad).
-// `endsOnAttack`: ids de esos efectos (salen de src/data).
+// Después de una acción del turno: si fue ofensiva (atacar, o lanzar sobre alguien), se cortan los efectos que
+// terminan al atacar (la invisibilidad). `endsOnAttack`: ids de esos efectos (salen de src/data).
 export function afterAction(s: Session, offensive: boolean, endsOnAttack: readonly string[]): Session {
   const cut = offensive && s.buffs.some((b) => endsOnAttack.includes(b))
-  if (!cut && !s.readied) return s
-  if (!cut) return { ...s, readied: false }
+  if (!cut) return s
   return {
     ...s,
-    readied: false,
     buffs: s.buffs.filter((b) => !endsOnAttack.includes(b)),
     buffRounds: Object.fromEntries(Object.entries(s.buffRounds).filter(([b]) => !endsOnAttack.includes(b))),
   }
@@ -621,14 +615,8 @@ export function startCombat(s: Session, prebuffRounds: Readonly<Record<string, n
   }
   const e = s.enhancement
   const enhancement = e && !e.rounds ? { ...e, rounds: ENHANCEMENT_ROUNDS } : e
-  return { ...s, combat: { round: 0 }, surprise: false, lastAction: null, buffRounds, enhancement }
+  return { ...s, combat: { round: 0 }, buffRounds, enhancement }
 }
-
-// Ronda sorpresa: se marca solo antes del primer NUEVO TURNO (ronda 0) y se apaga sola con NUEVO TURNO.
-export const toggleSurprise = (s: Session): Session => (s.combat?.round === 0 ? { ...s, surprise: !s.surprise } : s)
-
-// Guarda la acción del turno que se acaba de hacer (menú + fila), para repetirla. Solo en combate.
-export const recordAction = (s: Session, menu: string, item: string): Session => (s.combat ? { ...s, lastAction: { menu, item } } : s)
 
 export const charge = (s: Session): Session => ({ ...s, charging: true })
 export const endCharge = (s: Session): Session => ({ ...s, charging: false })
@@ -648,7 +636,7 @@ export function nextTurn(s: Session): Session {
   // Lo ajeno con rondas también pierde una (supuesto: vence en tu turno, no en el de quien lo lanzó)
   const external = s.external.flatMap((x) => (!x.rounds ? [x] : x.rounds > 1 ? [{ ...x, rounds: x.rounds - 1 }] : []))
   // El turno nuevo no se deshace, y lo de antes ya no se puede deshacer (volvería atrás también el turno).
-  return { ...s, combat: { round: s.combat.round + 1 }, surprise: false, charging: false, readied: false, stance: null, buffs, buffRounds, enhancement, external, undo: null }
+  return { ...s, combat: { round: s.combat.round + 1 }, charging: false, stance: null, buffs, buffRounds, enhancement, external, undo: null }
 }
 
 // Lo urgente al empezar tu turno (o en cualquier momento del combate): lo que te pide hacer algo. Los textos los arma
@@ -670,10 +658,7 @@ export function endCombat(s: Session): Session {
   return {
     ...s,
     combat: null,
-    surprise: false,
-    lastAction: null,
     charging: false,
-    readied: false,
     stance: null,
     spellCombatTrade: 0,
     buffs: s.buffs.filter((b) => !timed.includes(b)),
@@ -705,11 +690,9 @@ export function rest(sheet: ComputedSheet, s: Session): Session {
     buffRounds: {},
     external: [],
     castDefensively: false,
+    spellstrike: false,
     spellCombatTrade: 0,
     combat: null,
-    surprise: false,
-    lastAction: null,
     charging: false,
-    readied: false,
   }
 }

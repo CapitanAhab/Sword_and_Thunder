@@ -13,7 +13,7 @@ export function SpellCard({ spell, ctx, where, onClose }: { spell: { level: stri
   const level = spell.level === '0' ? t('play.cantrips') : `${t('play.level')} ${spell.level}`
   const rows: [string, string][] = def
     ? [
-        [t('spell.castingTime'), t(def.castingTime === 'round' ? 'spell.round' : 'spell.standard')],
+        [t('spell.castingTime'), t(`spell.${def.castingTime}`)],
         [t('spell.range'), spellRangeText(ctx, spell.name)],
         [t('spell.target'), def.target],
         [t('spell.duration'), def.duration],

@@ -7,12 +7,14 @@ import type { ActionKind } from './rules/pf1e/actions'
 export interface RuleCtx {
   level: number // nivel en la clase (para dotes: nivel de personaje)
   mods: Record<Ability, number>
+  bab: number // ataque base total
 }
 
 export interface FeatureDef {
   id: string
   name: string
   level: number
+  choice?: 'arcana' // al llegar a este nivel se elige uno (texto libre, sin cálculo)
 }
 
 export interface ResourceDef {
@@ -35,7 +37,8 @@ export interface AttackVariantDef {
 }
 
 // Acción de clase para el menú de #/play. Aparece sola desde minLevel.
-// kind: 'spell-attack' = ataque con la variante `variant` + un conjuro preparado (Spell Combat, Spellstrike)
+// kind: 'spell-attack' = ataque con la variante `variant` + un conjuro preparado (Spell Combat)
+//       'spell-weapon' = un conjuro de toque se entrega con un ataque del arma (Spellstrike): un switch en las listas de conjuros
 //       'enhance-weapon' = gasta `cost` y mejora el arma hasta el detalle maxEnhancement del recurso
 //       'spell-recall' = recupera un conjuro lanzado gastando tantos puntos como su nivel
 //       'spend' = solo gasta `cost`
@@ -45,7 +48,7 @@ export interface ClassActionDef {
   name: string
   minLevel: number
   menu: 'attack' | 'pool'
-  kind: 'spell-attack' | 'enhance-weapon' | 'spell-recall' | 'spend'
+  kind: 'spell-attack' | 'spell-weapon' | 'enhance-weapon' | 'spell-recall' | 'spend'
   actionType: ActionKind
   variant?: string
   cost?: { resource: string; amount: number }
@@ -57,6 +60,9 @@ export interface SpellcastingDef {
   kind: 'prepared' | 'spontaneous'
   spellsPerDay: readonly (readonly number[])[] // [nivel de clase - 1][nivel de conjuro]
   armorWithoutFailure?: (level: number) => ArmorCategory | null
+  // Conjuros de la lista de la clase que tienen datos, con su nivel: los que se suman al libro al subir de nivel
+  list?: Readonly<Record<string, number>>
+  spellsPerLevelUp?: number // conjuros que se suman gratis al libro en cada nivel
 }
 
 export interface ClassDef {

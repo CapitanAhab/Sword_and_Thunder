@@ -32,6 +32,7 @@ export const ES_NAMES: Readonly<Record<string, string>> = {
   // Dotes (sin confirmar con Devir 1e: nombres de la 3.5)
   'combat-casting': 'Lanzar conjuros en combate',
   'improved-initiative': 'Iniciativa mejorada',
+  'power-attack': 'Ataque poderoso',
 
   // Raza e idiomas
   human: 'Humano',
@@ -184,6 +185,33 @@ const ES_SPELLS: Readonly<Record<string, string>> = {
   Vanish: 'Desvanecer',
   Grease: 'Grasa',
   'Enlarge Person': 'Agrandar persona',
+  'Magic Missile': 'Proyectil mágico',
+  'Burning Hands': 'Manos ardientes',
+  'Chill Touch': 'Toque gélido',
+  'Color Spray': 'Rociada de color',
+  'Expeditious Retreat': 'Retirada expeditiva',
+  'Feather Fall': 'Caída de pluma',
+  'Floating Disk': 'Disco flotante',
+  Jump: 'Salto',
+  'Magic Weapon': 'Arma mágica',
+  Mount: 'Montura',
+  'Obscuring Mist': 'Niebla de obscurecimiento',
+  'Ray of Enfeeblement': 'Rayo de debilitamiento',
+  'Reduce Person': 'Reducir persona',
+  'Silent Image': 'Imagen silenciosa',
+  'True Strike': 'Impacto verdadero',
+  'Unseen Servant': 'Sirviente invisible',
+  'Hydraulic Push': 'Empujón hidráulico',
+  'Flare Burst': 'Explosión de llamaradas',
+  'Stone Fist': 'Puño de piedra',
+  'Warding Weapon': 'Arma protectora',
+  'Jury-Rig': 'Arreglar',
+  Longshot: 'Disparo largo',
+  'Shock Shield': 'Escudo eléctrico',
+  'Lock Gaze': 'Fijar mirada',
+  'Illusion of Calm': 'Ilusión de calma',
+  'Mirror Strike': 'Impacto múltiple',
+  'Adjuring Step': 'Paso abjurador',
 }
 
 export function localSpell(name: string): string {
@@ -203,6 +231,7 @@ const SUMMARIES: Readonly<Record<string, string>> = {
   // Dotes
   'combat-casting': '+4 a concentración al lanzar a la defensiva o apresado',
   'improved-initiative': '+4 a la iniciativa',
+  'power-attack': 'Menos ataque cuerpo a cuerpo, más daño (se prende en Ataques)',
   // Raza
   'bonus-feat': 'Una dote extra',
   skilled: '+1 rango de habilidad por nivel',

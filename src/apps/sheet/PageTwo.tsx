@@ -333,10 +333,10 @@ function FeatureGroup({ head, features, testId }: { head: string; features: Feat
       <p className="line-head">{head}</p>
       <ul className="plain-list" data-testid={testId}>
         {features.map((f) => {
-          const summary = localSummary(f.id)
+          const summary = f.custom ? f.notes : localSummary(f.id)
           return (
             <li key={f.id}>
-              {localName(f.id, f.name)}
+              {f.custom ? f.name : localName(f.id, f.name)}
               {summary && (
                 <small className="muted item-note" data-testid={`sheet-feature-${f.id}-summary`}>
                   {summary}

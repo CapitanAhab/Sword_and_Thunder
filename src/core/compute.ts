@@ -106,6 +106,8 @@ export interface FeatureLine {
   name: string
   source: string // id de raza o clase
   level?: number
+  custom?: boolean // elegido por el jugador (un Arcano): el nombre y la nota se muestran tal cual
+  notes?: string
 }
 
 export interface ActionLine extends ClassActionDef {
@@ -210,8 +212,10 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
   }
   const am = Object.fromEntries(ABILITIES.map((a) => [a, abilities[a].mod])) as Record<Ability, number>
 
+  const bab = classes.reduce((n, c) => n + baseAttack(c.def.bab, c.level), 0)
+
   // --- Dotes ---
-  const featCtx: RuleCtx = { level: charLevel, mods: am }
+  const featCtx: RuleCtx = { level: charLevel, mods: am, bab }
   const feats = character.feats.map((f) => {
     const def = rules.feats[f.id]
     if (!def) {
@@ -230,8 +234,6 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     used: feats.length,
   }
   if (featSlots.used > featSlots.available) issues.push({ code: 'feats-over-limit' })
-
-  const bab = classes.reduce((n, c) => n + baseAttack(c.def.bab, c.level), 0)
 
   // --- HP ---
   let hitDice = 0
@@ -477,7 +479,7 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
   // --- Recursos y rasgos ---
   const resources = classes.flatMap(({ def, level }) =>
     (def.resources ?? []).map((r): ResourceLine => {
-      const ctx: RuleCtx = { level, mods: am }
+      const ctx: RuleCtx = { level, mods: am, bab }
       const max = stat([mod(`resource.${r.id}`, 'base', r.max(ctx), def.name), ...pick(`resource.${r.id}`)])
       return { id: r.id, name: r.name, classId: def.id, max, details: r.details?.(ctx) ?? {} }
     }),
@@ -487,6 +489,10 @@ export function computeSheet(character: Character, rules: RulesDb, session: Sess
     ...classes.flatMap(({ def, level }) =>
       def.features.filter((f) => f.level <= level).map((f) => ({ ...f, source: def.id })),
     ),
+    // Los Arcanos elegidos van con la primera clase (hoy, una sola: el magus)
+    ...(classes[0]
+      ? character.arcana.map((a, i): FeatureLine => ({ id: `arcana-choice-${i + 1}`, name: a.name, notes: a.notes, custom: true, source: classes[0]!.def.id }))
+      : []),
   ]
 
   const actions = classes.flatMap(({ def, level }) =>

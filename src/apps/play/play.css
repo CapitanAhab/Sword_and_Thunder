@@ -299,6 +299,38 @@ a.hud-icon {
   line-clamp: 2;
   max-height: calc(2 * var(--row-lh));
 }
+/* Tiradas: un bloque más, solo en las filas que las tienen (la lista de arriba se achica) */
+.detail .d-steps {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+  font-size: 0.9rem;
+  line-height: var(--row-lh);
+}
+.detail .d-step-title {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+/* El número que tirás: lo único grande de la franja, alineado a la derecha en su columna */
+.detail .d-step {
+  display: grid;
+  grid-template-columns: 2.8em 1fr;
+  column-gap: 10px;
+  align-items: baseline;
+}
+.detail .d-roll {
+  text-align: right;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  line-height: 1.5rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.detail .d-step-text {
+  min-width: 0;
+}
 /* Lo urgente (PG bajos, tumbado, carga en la mano): un renglón más, solo cuando hay algo */
 .d-warn {
   color: var(--warn);
@@ -417,10 +449,6 @@ a.hud-icon {
   color: var(--text-muted);
   opacity: 0.55;
 }
-/* Solo para leer (sin acción): tono apagado, sin opacidad (no está bloqueada) */
-.row.info .row-label {
-  color: var(--text-muted);
-}
 .row-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -437,6 +465,14 @@ a.hud-icon {
   color: var(--text-muted);
   font-size: 1.05rem;
   line-height: 1;
+}
+/* El atributo de una habilidad (y los rangos al subir de nivel), apagado antes del total */
+.hint {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 .badge {
   flex: none;

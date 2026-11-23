@@ -55,7 +55,3 @@ main {
   padding-top: calc(var(--gutter) + env(safe-area-inset-top));
   padding-bottom: calc(var(--gutter) + env(safe-area-inset-bottom));
 }
-
-.placeholder p {
-  color: var(--text-muted);
-}

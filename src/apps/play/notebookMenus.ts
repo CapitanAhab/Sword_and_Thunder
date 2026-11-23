@@ -7,6 +7,7 @@ import { itemsLeft, type Session } from '../../core/session'
 import type { Character } from '../../core/schema'
 import { formatInt } from '../sheet/labels'
 import type { FormSpec, FormValues } from './FormCard'
+import { levelUpUndoRow } from './levelUpMenus'
 import type { MenuCtx, MenuItem } from './menus'
 
 // Lo que se anota en la mesa: Oro y XP, Inventario, Notas, Respaldo. Filas de Personaje › Libreta y sus submenús.
@@ -227,6 +228,7 @@ function notebookRows(c: MenuCtx, book: Book): MenuItem[] {
       },
     },
     { id: 'backup', label: tr('play.backup'), detail: { title: tr('play.backup'), line: tr('play.backupNote') }, action: { type: 'open', menu: 'backup' } },
+    ...levelUpUndoRow(c, book),
   ]
 }
 

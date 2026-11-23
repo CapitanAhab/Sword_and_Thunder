@@ -52,8 +52,13 @@ function Row({ item, selected, onTap, onHold }: { item: MenuItem; selected: bool
       data-testid={`menu-item-${item.id}`}
     >
       <span className="row-label">{item.label}</span>
-      {(item.badge || item.nav === 'submenu') && (
+      {(item.badge || item.hint || item.nav === 'submenu') && (
         <span className="row-end">
+          {item.hint && (
+            <span className="hint" data-testid={`menu-item-${item.id}-hint`}>
+              {item.hint}
+            </span>
+          )}
           {item.badge && <span className={`badge fx-target${item.badge.tone ? ` ${item.badge.tone}` : ''}`}>{item.badge.text}</span>}
           {item.nav === 'submenu' && (
             <span className="go" aria-hidden="true">

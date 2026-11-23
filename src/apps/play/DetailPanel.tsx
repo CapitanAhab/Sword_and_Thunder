@@ -6,6 +6,7 @@ import type { MenuItem } from './menus'
 //   1 título + ⓘ + tag
 //   2 y 3 el cuerpo: las columnas en una línea (Atq +3 · Daño 1d8+3 · …) y debajo la descripción gris,
 //     o, sin columnas, `line` y la descripción repartidas en los dos renglones.
+// Las tiradas (steps) suman un bloque debajo solo en las filas que las tienen: el número a tirar grande, en columna.
 // Lo urgente (amarillo) suma un renglón abajo solo cuando hay algo. Si algo no entra, termina en "…" y aparece ⓘ:
 // tocar la franja abre la tarjeta (la del conjuro, o DetailCard con el texto completo).
 export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: () => void }) {
@@ -13,8 +14,8 @@ export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: 
   const { t } = useT()
   const ref = useRef<HTMLElement | null>(null)
   const [overflow, setOverflow] = useState(false)
-  const { title, tag, stats, line, note, extra, warn } = item.detail
-  const desc = (stats ? [line, note, extra] : [note, extra]).filter((s): s is string => Boolean(s)).join(' · ')
+  const { title, tag, stats, line, note, extra, warn, steps } = item.detail
+  const desc = (stats ? [line, note, extra] : [note, extra]).filter((s): s is string => Boolean(s)).join('. ')
   // Sin columnas: `line` usa un renglón si hay descripción debajo, si no, los dos (y al revés)
   const first = stats ? null : line
   const tappable = Boolean(item.spell) || overflow
@@ -65,6 +66,23 @@ export function DetailPanel({ item, onOpenCard }: { item: MenuItem; onOpenCard: 
         {first && <div className={`d-line clamp ${desc ? 'rows-1' : 'rows-2'}`}>{first}</div>}
         {desc && <div className={`d-desc clamp ${stats || first ? 'rows-1' : 'rows-2'}`}>{desc}</div>}
       </div>
+      {steps && steps.length > 0 && (
+        <div className="d-steps" data-testid="play-detail-steps">
+          {steps.map((g, gi) => (
+            <div key={gi} className="d-step-group">
+              {g.title && <div className="d-step-title">{g.title}</div>}
+              {g.lines.map((l, li) => (
+                <div key={li} className="d-step">
+                  <span className="d-roll" data-testid={l.roll ? `play-detail-roll-${gi}-${li}` : undefined}>
+                    {l.roll ?? ''}
+                  </span>
+                  <span className="d-step-text">{l.text}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {warn && (
         <div className="d-warn fit" data-testid="play-detail-warn">
           {warn}
